@@ -1088,4 +1088,3 @@ export default function Home() {
     </div>
   );
 }
-```eof
