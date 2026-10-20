@@ -226,12 +226,11 @@ function getStatusBadge(status: string) {
 }
 
 export default function Home() {
-  const [currentUrl, setCurrentUrl] = useState("https://guniaproject.com.ua");
-  const [productUrl, setProductUrl] = useState("https://guniaproject.com.ua/products/plate-bird");
-  const [collectionUrl, setCollectionUrl] = useState("https://guniaproject.com.ua/collections/ceramics");
-  const [showMultiPage, setShowMultiPage] = useState(true);
+  const [homeUrl, setHomeUrl] = useState("guniaproject.com.ua");
+  const [productUrl, setProductUrl] = useState("");
+  const [collectionUrl, setCollectionUrl] = useState("");
 
-  const [sheetUrl, setSheetUrl] = useState("https://docs.google.com/spreadsheets/d/1I4kxT657W2_n_zQ16UN0p6E2e0MsEeb_nMCeqoewm5Q/edit?hl=ru&gid=1420783045#gid=1420783045");
+  const [sheetUrl, setSheetUrl] = useState("");
   const [useSpreadsheet, setUseSpreadsheet] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   
@@ -243,6 +242,17 @@ export default function Home() {
   const [shopifyData] = useState(DEFAULT_AUDIT_REPORT.data.shopifyHealth);
   const [currentScore, setCurrentScore] = useState(DEFAULT_AUDIT_REPORT.score);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  // Хелпер для отримання базового домену для динамічних плейсхолдерів
+  const getBaseUrl = () => {
+    try {
+      const clean = homeUrl.trim().startsWith('http') ? homeUrl.trim() : `https://${homeUrl.trim()}`;
+      const url = new URL(clean);
+      return url.hostname;
+    } catch {
+      return "store.com";
+    }
+  };
 
   const handlePrintPdf = () => {
     window.print();
@@ -310,17 +320,21 @@ export default function Home() {
     setIsLoading(true);
     setStatusMessage("Скануємо сторінки через Google PageSpeed API...");
 
-    let cleanHome = currentUrl.trim();
+    let cleanHome = homeUrl.trim();
     if (!cleanHome.startsWith('http://') && !cleanHome.startsWith('https://')) {
       cleanHome = 'https://' + cleanHome;
-      setCurrentUrl(cleanHome);
+      setHomeUrl(cleanHome);
     }
+
+    // Якщо поля пусті, генеруємо стандартні URL на базі головного домену
+    const finalProductUrl = productUrl.trim() !== "" ? productUrl : `${cleanHome}/products/sample`;
+    const finalCollectionUrl = collectionUrl.trim() !== "" ? collectionUrl : `${cleanHome}/collections/all`;
 
     try {
       const [homeRes, prodRes, colRes] = await Promise.allSettled([
         fetchPageSpeed(cleanHome),
-        fetchPageSpeed(productUrl),
-        fetchPageSpeed(collectionUrl)
+        fetchPageSpeed(finalProductUrl),
+        fetchPageSpeed(finalCollectionUrl)
       ]);
 
       const homeData = homeRes.status === 'fulfilled' ? homeRes.value : { score: 58, a11y: 96, lcp: '3.9 c' };
@@ -449,90 +463,79 @@ export default function Home() {
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-5 print:p-0 print:space-y-4">
         
         {/* Search & Multi-Page Input Bar */}
-        <section className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-3 no-print">
+        <section className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4 no-print">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
             <div>
               <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-700 flex items-center space-x-1.5">
                 <Search className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Сторінки для тристороннього аудиту Shopify магазину</span>
+                <span>Аналіз інфраструктури магазину</span>
               </h2>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Основний рекламний бюджет зосереджений на картках товарів (PDP - 54% трафіку), а не тільки на головній.
-              </p>
             </div>
-            
             <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowMultiPage(!showMultiPage)}
-                className="text-xs text-indigo-600 hover:text-indigo-800 font-medium cursor-pointer"
-              >
-                {showMultiPage ? 'Згорнути URL-адреси' : 'Налаштувати всі 3 URL'}
-              </button>
               <button
                 onClick={() => setUseSpreadsheet(!useSpreadsheet)}
                 className="text-xs text-slate-500 hover:text-indigo-600 font-medium flex items-center space-x-1 transition cursor-pointer"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
-                <span>{useSpreadsheet ? 'Сховати таблицю' : '+ Google Таблиця'}</span>
+                <span>{useSpreadsheet ? 'Сховати таблицю' : '+ Google Таблиця (Опційно)'}</span>
               </button>
             </div>
           </div>
 
-          {/* 3 URL Fields: Home, PDP, PLP */}
-          {showMultiPage && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 flex items-center gap-1">
-                  <Globe className="w-3.5 h-3.5 text-slate-400" />
-                  Головна сторінка (Home)
-                </label>
-                <input
-                  type="text"
-                  value={currentUrl}
-                  onChange={(e) => setCurrentUrl(e.target.value)}
-                  placeholder="https://guniaproject.com.ua"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-mono focus:outline-none focus:border-indigo-600"
-                />
-              </div>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+                <Globe className="w-4 h-4 text-indigo-600" />
+                Головна адреса магазину
+              </label>
+              <input
+                type="text"
+                value={homeUrl}
+                onChange={(e) => setHomeUrl(e.target.value)}
+                placeholder="store.com"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-900 font-mono focus:outline-none focus:border-indigo-600 shadow-sm transition"
+              />
+            </div>
 
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1 border-t border-slate-100/60 mt-2">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 flex items-center gap-1">
-                  <Package className="w-3.5 h-3.5 text-indigo-600" />
-                  Картка товару (PDP - 54% трафіку)
+                <label className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+                  <Package className="w-3.5 h-3.5 text-slate-400" />
+                  Посилання на картку товару (Опційно)
                 </label>
                 <input
                   type="text"
                   value={productUrl}
                   onChange={(e) => setProductUrl(e.target.value)}
-                  placeholder="https://guniaproject.com.ua/products/plate-bird"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-mono focus:outline-none focus:border-indigo-600"
+                  placeholder={`https://${getBaseUrl()}/products/...`}
+                  className="w-full bg-transparent border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600 font-mono focus:outline-none focus:border-indigo-400 transition"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 flex items-center gap-1">
+                <label className="text-xs font-semibold text-slate-500 flex items-center gap-1">
                   <Tag className="w-3.5 h-3.5 text-slate-400" />
-                  Каталог колекції (PLP)
+                  Посилання на колекцію (Опційно)
                 </label>
                 <input
                   type="text"
                   value={collectionUrl}
                   onChange={(e) => setCollectionUrl(e.target.value)}
-                  placeholder="https://guniaproject.com.ua/collections/ceramics"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-mono focus:outline-none focus:border-indigo-600"
+                  placeholder={`https://${getBaseUrl()}/collections/all`}
+                  className="w-full bg-transparent border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600 font-mono focus:outline-none focus:border-indigo-400 transition"
                 />
               </div>
             </div>
-          )}
+          </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3">
             <button
               disabled={isLoading}
               onClick={handleRunAudit}
               className="w-full sm:w-auto px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium text-xs sm:text-sm transition shadow-xs flex items-center justify-center space-x-2 disabled:opacity-60 cursor-pointer active:scale-98 shrink-0"
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-              <span>{isLoading ? 'Генеруємо звіт...' : 'Згенерувати аудит 3 сторінок'}</span>
+              <span>{isLoading ? 'Генеруємо звіт...' : 'Згенерувати аудит магазину'}</span>
             </button>
 
             {statusMessage && (
@@ -581,10 +584,10 @@ export default function Home() {
                 </span>
               </div>
               <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-                {DEFAULT_AUDIT_REPORT.brand}: Комплексний аудит e-Commerce
+                {getBaseUrl()}: Комплексний аудит e-Commerce
               </h1>
-              <a href={currentUrl} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 hover:underline font-mono">
-                {currentUrl}
+              <a href={homeUrl} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 hover:underline font-mono">
+                {homeUrl}
               </a>
             </div>
 
@@ -1087,3 +1090,4 @@ export default function Home() {
     </div>
   );
 }
+```eof
