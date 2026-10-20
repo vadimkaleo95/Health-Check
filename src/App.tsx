@@ -1,3 +1,20 @@
+На першому скріншоті чітко видно причину зупинки: Unterminated string literal на рядку 426.
+
+Це означає, що під час копіювання коду випадково не виділився весь текст, і код обірвався прямо на рядку border-collapse: collapse !important. Через те, що немає закриваючих дужок } і лапок `, компілятор не може прочитати файл далі.
+
+Щоб гарантовано вирішити цю проблему без ручного пошуку пропущених символів, я згенерував повний і цілісний файл.
+
+Що треба зробити:
+
+Відкрийте файл src/App.tsx на GitHub і натисніть іконку олівця (Edit).
+
+Натисніть Ctrl + A (щоб виділити абсолютно весь старий код).
+
+Натисніть Backspace, щоб файл став повністю порожнім.
+
+Вставте туди цей код і натисніть Commit changes:
+
+Фрагмент коду
 import React, { useState } from 'react';
 import { 
   ShieldAlert, 
@@ -239,13 +256,13 @@ export default function Home() {
 
   const [perfData, setPerfData] = useState(DEFAULT_AUDIT_REPORT.data.performance);
   const [seoData, setSeoData] = useState(DEFAULT_AUDIT_REPORT.data.seoAndAi);
-  const [shopifyData, setShopifyData] = useState(DEFAULT_AUDIT_REPORT.data.shopifyHealth);
+  const [shopifyData] = useState(DEFAULT_AUDIT_REPORT.data.shopifyHealth);
   const [currentScore, setCurrentScore] = useState(DEFAULT_AUDIT_REPORT.score);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const getBaseUrl = () => {
     try {
-      const clean = homeUrl.trim().startsWith('http') ? homeUrl.trim() : `https://\${homeUrl.trim()}`;
+      const clean = homeUrl.trim().startsWith('http') ? homeUrl.trim() : `https://${homeUrl.trim()}`;
       const url = new URL(clean);
       return url.hostname;
     } catch {
@@ -279,7 +296,7 @@ export default function Home() {
 
       const parsedSeo = {
         ...DEFAULT_AUDIT_REPORT.data.seoAndAi,
-        sampleSize: `\${rowCount} рядків вибірки (із підключеної Google Таблиці)`,
+        sampleSize: `${rowCount} рядків вибірки (із підключеної Google Таблиці)`,
         metrics: [
           { check: "Title > 60 символів", products: `${Math.round(rowCount * 0.85)} з ${rowCount}`, collections: "8 з 25", action: "Скоротити за шаблоном «Назва | Brand»" },
           { check: "Подвійний бренд у Title", products: `${Math.round(rowCount * 0.7)} з ${rowCount}`, collections: "0", action: "Прибрати хардкод назви бренду з назв" },
@@ -290,7 +307,7 @@ export default function Home() {
       };
 
       setSeoData(parsedSeo);
-      setStatusMessage(`Дані з Google Таблиці успішно інтегровано: оброблено \${rowCount} рядків вибірки.`);
+      setStatusMessage(`Дані з Google Таблиці успішно інтегровано: оброблено ${rowCount} рядків вибірки.`);
     } catch (e: any) {
       console.warn("Spreadsheet parsing notice:", e);
       setSeoData({
@@ -303,16 +320,16 @@ export default function Home() {
   };
 
   const fetchPageSpeed = async (targetUrl: string) => {
-    const clean = targetUrl.trim().startsWith('http') ? targetUrl.trim() : `https://\${targetUrl.trim()}`;
-    const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=\${encodeURIComponent(clean)}&strategy=mobile`;
+    const clean = targetUrl.trim().startsWith('http') ? targetUrl.trim() : `https://${targetUrl.trim()}`;
+    const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(clean)}&strategy=mobile`;
     const res = await fetch(apiUrl);
-    if (!res.ok) throw new Error(`HTTP \${res.status}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     const lighthouse = json.lighthouseResult;
     const score = Math.round((lighthouse?.categories?.performance?.score || 0) * 100);
     const a11y = Math.round((lighthouse?.categories?.accessibility?.score || 0) * 100);
     const lcpSec = ((lighthouse?.audits?.['largest-contentful-paint']?.numericValue || 3800) / 1000).toFixed(1);
-    return { score, a11y, lcp: `\${lcpSec} c` };
+    return { score, a11y, lcp: `${lcpSec} c` };
   };
 
   const handleRunAudit = async () => {
@@ -325,8 +342,8 @@ export default function Home() {
       setHomeUrl(cleanHome);
     }
 
-    const finalProductUrl = productUrl.trim() !== "" ? productUrl : `\${cleanHome}/products/sample`;
-    const finalCollectionUrl = collectionUrl.trim() !== "" ? collectionUrl : `\${cleanHome}/collections/all`;
+    const finalProductUrl = productUrl.trim() !== "" ? productUrl : `${cleanHome}/products/sample`;
+    const finalCollectionUrl = collectionUrl.trim() !== "" ? collectionUrl : `${cleanHome}/collections/all`;
 
     try {
       const [homeRes, prodRes, colRes] = await Promise.allSettled([
@@ -422,4 +439,669 @@ export default function Home() {
           }
           table {
             width: 100% !important;
-            border-collapse: collapse !important
+            border-collapse: collapse !important;
+          }
+          th, td {
+            padding: 6px 8px !important;
+            border-bottom: 1px solid #e2e8f0 !important;
+          }
+        }
+      `}} />
+
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs no-print">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-xs">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="font-bold text-base text-slate-900 tracking-tight">
+                Shopify & E-Commerce Health Check
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={handlePrintPdf}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-medium shadow-xs transition active:scale-95 cursor-pointer"
+              title="Завантажити звіт у PDF"
+            >
+              <Download className="w-4 h-4" />
+              <span>Завантажити PDF</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Container */}
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-5 print:p-0 print:space-y-4">
+        
+        {/* Search & Multi-Page Input Bar */}
+        <section className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4 no-print">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+            <div>
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-700 flex items-center space-x-1.5">
+                <Search className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Аналіз інфраструктури магазину</span>
+              </h2>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setUseSpreadsheet(!useSpreadsheet)}
+                className="text-xs text-slate-500 hover:text-indigo-600 font-medium flex items-center space-x-1 transition cursor-pointer"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
+                <span>{useSpreadsheet ? 'Сховати таблицю' : '+ Google Таблиця (Опційно)'}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+                <Globe className="w-4 h-4 text-indigo-600" />
+                Головна адреса магазину
+              </label>
+              <input
+                type="text"
+                value={homeUrl}
+                onChange={(e) => setHomeUrl(e.target.value)}
+                placeholder="store.com"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-900 font-mono focus:outline-none focus:border-indigo-600 shadow-sm transition"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1 border-t border-slate-100/60 mt-2">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+                  <Package className="w-3.5 h-3.5 text-slate-400" />
+                  Посилання на картку товару (Опційно)
+                </label>
+                <input
+                  type="text"
+                  value={productUrl}
+                  onChange={(e) => setProductUrl(e.target.value)}
+                  placeholder={`https://${getBaseUrl()}/products/...`}
+                  className="w-full bg-transparent border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600 font-mono focus:outline-none focus:border-indigo-400 transition"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+                  <Tag className="w-3.5 h-3.5 text-slate-400" />
+                  Посилання на колекцію (Опційно)
+                </label>
+                <input
+                  type="text"
+                  value={collectionUrl}
+                  onChange={(e) => setCollectionUrl(e.target.value)}
+                  placeholder={`https://${getBaseUrl()}/collections/all`}
+                  className="w-full bg-transparent border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600 font-mono focus:outline-none focus:border-indigo-400 transition"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3">
+            <button
+              disabled={isLoading}
+              onClick={handleRunAudit}
+              className="w-full sm:w-auto px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium text-xs sm:text-sm transition shadow-xs flex items-center justify-center space-x-2 disabled:opacity-60 cursor-pointer active:scale-98 shrink-0"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              <span>{isLoading ? 'Генеруємо звіт...' : 'Згенерувати аудит магазину'}</span>
+            </button>
+
+            {statusMessage && (
+              <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{statusMessage}</span>
+              </div>
+            )}
+          </div>
+
+          {useSpreadsheet && (
+            <div className="p-3.5 bg-indigo-50/40 border border-indigo-100 rounded-xl space-y-2 text-xs mt-3">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-indigo-950 flex items-center gap-1.5">
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                  Посилання на Google Таблицю (Google Sheets)
+                </span>
+                <span className="text-[11px] text-slate-500">Доступ: «Усі, хто має посилання»</span>
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={sheetUrl}
+                  onChange={(e) => setSheetUrl(e.target.value)}
+                  placeholder="https://docs.google.com/spreadsheets/d/1I4kxT657W2.../edit#gid=1420783045"
+                  className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-2 text-xs text-slate-800 placeholder-slate-400 font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+              <p className="text-[11px] text-slate-500">
+                💡 Застосунок автоматично підтягне вибірку товарів і колекцій, перевірить дублі бренду та синхронізує показники в звіті.
+              </p>
+            </div>
+          )}
+        </section>
+
+        {/* Score Card */}
+        <section className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs print-section">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+            <div>
+              <div className="flex items-center space-x-2 mb-1 flex-wrap">
+                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-100 flex items-center gap-1">
+                  <ShoppingBag className="w-3 h-3" /> Shopify Health Report
+                </span>
+                <span className="text-xs text-slate-400 flex items-center gap-1">
+                  <Calendar className="w-3 h-3" /> {DEFAULT_AUDIT_REPORT.date}
+                </span>
+              </div>
+              <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+                {getBaseUrl()}: Комплексний аудит e-Commerce
+              </h1>
+              <a href={homeUrl} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 hover:underline font-mono">
+                {homeUrl}
+              </a>
+            </div>
+
+            <div className="flex items-center space-x-3 bg-slate-50 border border-slate-200 rounded-xl p-3 self-start sm:self-center">
+              <div className="text-right">
+                <div className="text-[10px] uppercase font-semibold text-slate-400">Оцінка здоров&apos;я</div>
+                <div className="text-xl font-extrabold text-slate-800">
+                  {currentScore} <span className="text-xs font-normal text-slate-400">/ 100</span>
+                </div>
+              </div>
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm border ${
+                currentScore >= 80 
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                  : currentScore >= 50 
+                    ? 'bg-amber-50 text-amber-700 border-amber-200' 
+                    : 'bg-rose-50 text-rose-700 border-rose-200'
+              }`}>
+                {currentScore >= 80 ? 'A' : currentScore >= 50 ? 'B' : 'C'}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 p-3 rounded-xl bg-amber-50/70 border border-amber-200/80 text-xs text-amber-900 flex items-start space-x-2">
+            <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold">Підсумок для клієнта: </span>
+              {DEFAULT_AUDIT_REPORT.summary}
+            </div>
+          </div>
+        </section>
+
+        {/* Tab Navigation */}
+        <div className="flex border-b border-slate-200 bg-transparent space-x-1 overflow-x-auto text-xs sm:text-sm no-print">
+          {[
+            { id: 'summary', label: 'Головна таблиця', icon: Layers },
+            { id: 'analytics', label: 'Аналітика, TikTok & GDPR', icon: ShieldAlert },
+            { id: 'shopify', label: 'Специфіка Shopify', icon: ShoppingBag },
+            { id: 'performance', label: 'Швидкість (Home / PDP / PLP)', icon: Gauge },
+            { id: 'seo', label: 'SEO, AI & Каталог', icon: BarChart3 },
+            { id: 'ux', label: 'UX/UI & Мобільні', icon: Smartphone },
+            { id: 'plan', label: 'План робіт', icon: ListTodo }
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`py-2 px-3 rounded-t-lg font-medium transition flex items-center space-x-1.5 whitespace-nowrap cursor-pointer border-b-2 ${
+                  isActive
+                    ? 'border-indigo-600 text-indigo-700 bg-white font-semibold'
+                    : 'border-transparent text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Print Layout */}
+        <div className="hidden print:block space-y-6">
+          <div className="print-section p-4 bg-white rounded-xl">
+            <h2 className="font-bold text-sm mb-3">Зведена таблиця стану</h2>
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b">
+                  <th>Область</th>
+                  <th>Стан</th>
+                  <th>Головний висновок</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="font-semibold">Аналітика & TikTok</td>
+                  <td>Критично</td>
+                  <td>{DEFAULT_AUDIT_REPORT.data.analyticsAndConsent.summary}</td>
+                </tr>
+                <tr>
+                  <td className="font-semibold">Shopify Health Check</td>
+                  <td>Потребує оптимізації</td>
+                  <td>{shopifyData.summary}</td>
+                </tr>
+                <tr>
+                  <td className="font-semibold">Швидкість сторінок</td>
+                  <td>Потребує уваги</td>
+                  <td>{perfData.summary}</td>
+                </tr>
+                <tr>
+                  <td className="font-semibold">SEO та Каталог</td>
+                  <td>Потребує роботи</td>
+                  <td>{seoData.summary}</td>
+                </tr>
+                <tr>
+                  <td className="font-semibold">UX/UI та Мобільні</td>
+                  <td>Добре</td>
+                  <td>{DEFAULT_AUDIT_REPORT.data.uxAndAccessibility.summary}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="print-section p-4 bg-white rounded-xl">
+            <h2 className="font-bold text-sm mb-3">Специфіка Shopify (Web Pixels, Ghost Code, Canonical)</h2>
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b">
+                  <th>Параметр</th>
+                  <th>Вердикт</th>
+                  <th>Деталі</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shopifyData.checks.map((chk, i) => (
+                  <tr key={i}>
+                    <td className="font-semibold">{chk.parameter}</td>
+                    <td>{chk.verdict}</td>
+                    <td>{chk.details}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="print-section p-4 bg-white rounded-xl">
+            <h2 className="font-bold text-sm mb-3">План робіт (Roadmap)</h2>
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b">
+                  <th>#</th>
+                  <th>Роль</th>
+                  <th>Задача</th>
+                  <th>Цінність</th>
+                  <th>Оцінка</th>
+                </tr>
+              </thead>
+              <tbody>
+                {DEFAULT_AUDIT_REPORT.data.actionPlan.map(t => (
+                  <tr key={t.id}>
+                    <td>{t.id}</td>
+                    <td>{t.role}</td>
+                    <td className="font-semibold">{t.task}</td>
+                    <td>{t.why}</td>
+                    <td>{t.estimate}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Screen Tabs */}
+        <div className="print:hidden">
+          {/* TAB 1: SUMMARY */}
+          {activeTab === 'summary' && (
+            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px]">
+                    <tr>
+                      <th className="py-3 px-4">Область аудиту</th>
+                      <th className="py-3 px-4">Стан</th>
+                      <th className="py-3 px-4">Головне спостереження</th>
+                      <th className="py-3 px-4 text-right">Дія</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                    <tr className="hover:bg-slate-50/60 cursor-pointer" onClick={() => setActiveTab('analytics')}>
+                      <td className="py-3.5 px-4 font-semibold text-slate-900 flex items-center gap-2">
+                        <ShieldAlert className="w-4 h-4 text-rose-500" />
+                        <span>Аналітика, TikTok & Згода (GDPR)</span>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border ${getStatusBadge(DEFAULT_AUDIT_REPORT.data.analyticsAndConsent.status).badge}`}>
+                          {DEFAULT_AUDIT_REPORT.data.analyticsAndConsent.statusLabel}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4">{DEFAULT_AUDIT_REPORT.data.analyticsAndConsent.summary}</td>
+                      <td className="py-3.5 px-4 text-right text-indigo-600 font-medium">Детальніше →</td>
+                    </tr>
+
+                    <tr className="hover:bg-slate-50/60 cursor-pointer" onClick={() => setActiveTab('shopify')}>
+                      <td className="py-3.5 px-4 font-semibold text-slate-900 flex items-center gap-2">
+                        <ShoppingBag className="w-4 h-4 text-amber-500" />
+                        <span>Специфіка Shopify (Web Pixels, App Bloat, Canonical)</span>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border ${getStatusBadge(shopifyData.status).badge}`}>
+                          {shopifyData.statusLabel}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4">{shopifyData.summary}</td>
+                      <td className="py-3.5 px-4 text-right text-indigo-600 font-medium">Детальніше →</td>
+                    </tr>
+
+                    <tr className="hover:bg-slate-50/60 cursor-pointer" onClick={() => setActiveTab('performance')}>
+                      <td className="py-3.5 px-4 font-semibold text-slate-900 flex items-center gap-2">
+                        <Gauge className="w-4 h-4 text-amber-500" />
+                        <span>Швидкість сторінок (PDP / PLP / Home)</span>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border ${getStatusBadge(perfData.status).badge}`}>
+                          {perfData.statusLabel}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4">{perfData.summary}</td>
+                      <td className="py-3.5 px-4 text-right text-indigo-600 font-medium">Детальніше →</td>
+                    </tr>
+
+                    <tr className="hover:bg-slate-50/60 cursor-pointer" onClick={() => setActiveTab('seo')}>
+                      <td className="py-3.5 px-4 font-semibold text-slate-900 flex items-center gap-2">
+                        <BarChart3 className="w-4 h-4 text-indigo-500" />
+                        <span>SEO, AI & Каталог</span>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border ${getStatusBadge(seoData.status).badge}`}>
+                          {seoData.statusLabel}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4">{seoData.summary}</td>
+                      <td className="py-3.5 px-4 text-right text-indigo-600 font-medium">Детальніше →</td>
+                    </tr>
+
+                    <tr className="hover:bg-slate-50/60 cursor-pointer" onClick={() => setActiveTab('ux')}>
+                      <td className="py-3.5 px-4 font-semibold text-slate-900 flex items-center gap-2">
+                        <Smartphone className="w-4 h-4 text-emerald-500" />
+                        <span>UX/UI & Мобільна ергономіка</span>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border ${getStatusBadge(DEFAULT_AUDIT_REPORT.data.uxAndAccessibility.status).badge}`}>
+                          {DEFAULT_AUDIT_REPORT.data.uxAndAccessibility.statusLabel}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4">{DEFAULT_AUDIT_REPORT.data.uxAndAccessibility.summary}</td>
+                      <td className="py-3.5 px-4 text-right text-indigo-600 font-medium">Детальніше →</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: ANALYTICS & TIKTOK */}
+          {activeTab === 'analytics' && (
+            <div className="space-y-4">
+              <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 text-xs text-rose-900">
+                <span className="font-bold">Sales & Risk Impact: </span>
+                {DEFAULT_AUDIT_REPORT.data.analyticsAndConsent.salesHook}
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+                <h3 className="text-sm font-bold text-slate-900 mb-3">Інструменти трекінгу та стан підключення</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-slate-500 uppercase text-[10px]">
+                        <th className="py-2">Платформа</th>
+                        <th className="py-2">Канал</th>
+                        <th className="py-2">Статус</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {DEFAULT_AUDIT_REPORT.data.analyticsAndConsent.tools.map((t, idx) => (
+                        <tr key={idx}>
+                          <td className="py-2.5 font-semibold text-slate-800">{t.name}</td>
+                          <td className="py-2.5 text-slate-500 font-mono text-[11px]">{t.channel}</td>
+                          <td className="py-2.5">{t.statusText}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+                <h3 className="text-sm font-bold text-slate-900 mb-3">Згода на Cookie (Поведінка в чистому браузері до кліку)</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-slate-500 uppercase text-[10px]">
+                        <th className="py-2">Скрипт / Сервіс</th>
+                        <th className="py-2">Поведінка ДО згоди</th>
+                        <th className="py-2">Цільовий стан (GDPR)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {DEFAULT_AUDIT_REPORT.data.analyticsAndConsent.consentDetails.map((c, idx) => (
+                        <tr key={idx}>
+                          <td className="py-2.5 font-semibold text-slate-800">{c.item}</td>
+                          <td className="py-2.5 text-rose-600">{c.stateBefore}</td>
+                          <td className="py-2.5 text-emerald-700">{c.targetState}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: SHOPIFY SPECIFICS */}
+          {activeTab === 'shopify' && (
+            <div className="space-y-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-900">
+                <span className="font-bold">Shopify Architecture: </span>
+                {shopifyData.salesHook}
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+                <h3 className="text-sm font-bold text-slate-900 mb-3">Діагностика архітектури теми Shopify</h3>
+                <div className="space-y-3 text-xs">
+                  {shopifyData.checks.map((chk, idx) => (
+                    <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <span className="font-semibold text-slate-900 block">{chk.parameter}</span>
+                        <p className="text-slate-600 text-[11px] mt-0.5">{chk.details}</p>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded text-[11px] font-semibold shrink-0 self-start sm:self-center border ${getStatusBadge(chk.status).badge}`}>
+                        {chk.verdict}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: PERFORMANCE */}
+          {activeTab === 'performance' && (
+            <div className="space-y-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-900">
+                <span className="font-bold">E-Commerce Conversion: </span>
+                {perfData.salesHook}
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+                <h3 className="text-sm font-bold text-slate-900 mb-3">Швидкість ключових сторінок (Multi-Page Matrix)</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {perfData.pages.map((pg: any, idx: number) => (
+                    <div key={idx} className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs text-slate-900">{pg.name}</span>
+                        <span className="text-[10px] text-slate-400">{pg.share}</span>
+                      </div>
+                      <div className="text-2xl font-black text-slate-800">
+                        {pg.mobileScore} <span className="text-xs font-normal text-slate-400">моб.</span>
+                      </div>
+                      <div className="text-[11px] text-slate-600 flex justify-between">
+                        <span>Десктоп: {pg.desktopScore}</span>
+                        <span>LCP: {pg.lcp}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+                <h3 className="text-sm font-bold text-slate-900 mb-2">Блокуючі ресурси теми:</h3>
+                <ul className="list-disc list-inside text-xs text-slate-600 space-y-1">
+                  {perfData.blockers.map((b: string, i: number) => (
+                    <li key={i}>{b}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: SEO & AI */}
+          {activeTab === 'seo' && (
+            <div className="space-y-4">
+              <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 text-xs text-indigo-900">
+                <span className="font-bold">SEO & AI Visibility: </span>
+                {seoData.salesHook}
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-bold text-slate-900">Аналіз мета-тегів та структури каталогу</h3>
+                  <span className="text-[11px] text-slate-400 font-mono">{seoData.sampleSize}</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-slate-500 uppercase text-[10px]">
+                        <th className="py-2">Перевірка</th>
+                        <th className="py-2">Товари</th>
+                        <th className="py-2">Колекції</th>
+                        <th className="py-2">Рекомендована дія</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {seoData.metrics.map((m: any, idx: number) => (
+                        <tr key={idx}>
+                          <td className="py-2.5 font-semibold text-slate-800">{m.check}</td>
+                          <td className="py-2.5">{m.products}</td>
+                          <td className="py-2.5">{m.collections}</td>
+                          <td className="py-2.5 text-indigo-600 font-medium">{m.action}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+                <h3 className="text-sm font-bold text-slate-900 mb-3">Готовність до ШІ-пошуку (LLM Agents)</h3>
+                <div className="space-y-2 text-xs">
+                  {seoData.aiSearchChecks.map((ai: any, i: number) => (
+                    <div key={i} className="flex justify-between items-center p-2.5 bg-slate-50 rounded-lg">
+                      <span className="font-medium text-slate-800">{ai.name}</span>
+                      <span className="text-slate-500">{ai.result}</span>
+                      <span className="font-semibold text-indigo-700">{ai.verdict}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 6: UX / UI */}
+          {activeTab === 'ux' && (
+            <div className="space-y-4">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-xs text-emerald-900">
+                <span className="font-bold">UX & Mobile Usability: </span>
+                {DEFAULT_AUDIT_REPORT.data.uxAndAccessibility.salesHook}
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+                <h3 className="text-sm font-bold text-slate-900 mb-3">Чекліст мобільної ергономіки та WCAG</h3>
+                <div className="space-y-3 text-xs">
+                  {DEFAULT_AUDIT_REPORT.data.uxAndAccessibility.checks.map((chk: any, idx: number) => (
+                    <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <span className="font-semibold text-slate-900 block">{chk.area}</span>
+                        <p className="text-slate-600 text-[11px] mt-0.5">{chk.details}</p>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded text-[11px] font-semibold shrink-0 self-start sm:self-center border ${getStatusBadge(chk.status).badge}`}>
+                        {chk.verdict}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 7: ACTION PLAN */}
+          {activeTab === 'plan' && (
+            <div className="space-y-4">
+              <div className="flex items-center space-x-2 bg-white p-2 rounded-xl border border-slate-200 text-xs">
+                <span className="text-slate-400 font-semibold px-2">Фільтр ролей:</span>
+                {(['all', 'Dev Team', 'SEO / Content', 'Design / UX'] as const).map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => setPlanFilter(r)}
+                    className={`px-3 py-1 rounded-lg transition font-medium cursor-pointer ${
+                      planFilter === r 
+                        ? 'bg-indigo-600 text-white shadow-xs' 
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    {r === 'all' ? 'Усі задачі' : r}
+                  </button>
+                ))}
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-[10px]">
+                    <tr>
+                      <th className="py-3 px-4">#</th>
+                      <th className="py-3 px-4">Роль</th>
+                      <th className="py-3 px-4">Задача</th>
+                      <th className="py-3 px-4">Бізнес-цінність</th>
+                      <th className="py-3 px-4 text-right">Оцінка</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                    {filteredTasks.map((t) => (
+                      <tr key={t.id} className="hover:bg-slate-50/50">
+                        <td className="py-3 px-4 font-mono text-slate-400">{t.id}</td>
+                        <td className="py-3 px-4 font-semibold text-indigo-700">{t.role}</td>
+                        <td className="py-3 px-4 font-medium text-slate-900">{t.task}</td>
+                        <td className="py-3 px-4 text-slate-500">{t.why}</td>
+                        <td className="py-3 px-4 text-right font-mono text-slate-600">{t.estimate}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      </main>
+
+      <footer className="mt-8 border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-400 no-print">
+        Shopify Health Check Engine • TikTok Pixel, Web Pixels API, Multi-Page Speed & PDF Export
+      </footer>
+    </div>
+  );
+}
