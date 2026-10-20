@@ -24,7 +24,7 @@ import {
 
 const DEFAULT_AUDIT_REPORT = {
   name: "Gunia Project (E-Commerce / Shopify)",
-  url: "https://guniaproject.com.ua",
+  url: "[https://guniaproject.com.ua](https://guniaproject.com.ua)",
   brand: "Gunia Project",
   date: "Жовтень 2026",
   auditor: "Base X Tech (@Ale)",
@@ -202,7 +202,7 @@ function getStatusBadge(status: string) {
       return {
         badge: 'bg-rose-50 text-rose-700 border-rose-200',
         text: 'text-rose-600',
-        icon: <XCircle className="w-3.5 h-3.5 text-rose-500 inline mr-1" />,
+        icon: <XCircle className="w-3.5 h-3.5 text-rose-500 inline mr-1"/>,
         label: 'Критично'
       };
     case 'warning':
@@ -210,7 +210,7 @@ function getStatusBadge(status: string) {
       return {
         badge: 'bg-amber-50 text-amber-700 border-amber-200',
         text: 'text-amber-600',
-        icon: <AlertTriangle className="w-3.5 h-3.5 text-amber-500 inline mr-1" />,
+        icon: <AlertTriangle className="w-3.5 h-3.5 text-amber-500 inline mr-1"/>,
         label: 'Потребує уваги'
       };
     case 'good':
@@ -219,7 +219,7 @@ function getStatusBadge(status: string) {
       return {
         badge: 'bg-emerald-50 text-emerald-700 border-emerald-200',
         text: 'text-emerald-600',
-        icon: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 inline mr-1" />,
+        icon: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 inline mr-1"/>,
         label: 'Добре'
       };
   }
@@ -239,11 +239,10 @@ export default function Home() {
 
   const [perfData, setPerfData] = useState(DEFAULT_AUDIT_REPORT.data.performance);
   const [seoData, setSeoData] = useState(DEFAULT_AUDIT_REPORT.data.seoAndAi);
-  const [shopifyData] = useState(DEFAULT_AUDIT_REPORT.data.shopifyHealth);
+  const [shopifyData, setShopifyData] = useState(DEFAULT_AUDIT_REPORT.data.shopifyHealth);
   const [currentScore, setCurrentScore] = useState(DEFAULT_AUDIT_REPORT.score);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  // Хелпер для отримання базового домену для динамічних плейсхолдерів
   const getBaseUrl = () => {
     try {
       const clean = homeUrl.trim().startsWith('http') ? homeUrl.trim() : `https://${homeUrl.trim()}`;
@@ -267,7 +266,7 @@ export default function Home() {
       const sheetId = match[1];
       const gidMatch = url.match(/gid=([0-9]+)/);
       const gid = gidMatch ? gidMatch[1] : "0";
-      const csvExportUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
+      const csvExportUrl = `[https://docs.google.com/spreadsheets/d/$](https://docs.google.com/spreadsheets/d/$){sheetId}/export?format=csv&gid=${gid}`;
 
       const res = await fetch(csvExportUrl);
       if (!res.ok) {
@@ -305,7 +304,7 @@ export default function Home() {
 
   const fetchPageSpeed = async (targetUrl: string) => {
     const clean = targetUrl.trim().startsWith('http') ? targetUrl.trim() : `https://${targetUrl.trim()}`;
-    const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(clean)}&strategy=mobile`;
+    const apiUrl = `[https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=$](https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=$){encodeURIComponent(clean)}&strategy=mobile`;
     const res = await fetch(apiUrl);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
@@ -326,7 +325,6 @@ export default function Home() {
       setHomeUrl(cleanHome);
     }
 
-    // Якщо поля пусті, генеруємо стандартні URL на базі головного домену
     const finalProductUrl = productUrl.trim() !== "" ? productUrl : `${cleanHome}/products/sample`;
     const finalCollectionUrl = collectionUrl.trim() !== "" ? collectionUrl : `${cleanHome}/collections/all`;
 
@@ -437,7 +435,7 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-xs">
-              <Sparkles className="w-4 h-4" />
+              <Sparkles className="w-4 h-4"/>
             </div>
             <div>
               <span className="font-bold text-base text-slate-900 tracking-tight">
@@ -452,7 +450,7 @@ export default function Home() {
               className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-medium shadow-xs transition active:scale-95 cursor-pointer"
               title="Завантажити звіт у PDF"
             >
-              <Download className="w-4 h-4" />
+              <Download className="w-4 h-4"/>
               <span>Завантажити PDF</span>
             </button>
           </div>
@@ -467,7 +465,7 @@ export default function Home() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
             <div>
               <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-700 flex items-center space-x-1.5">
-                <Search className="w-3.5 h-3.5 text-indigo-600" />
+                <Search className="w-3.5 h-3.5 text-indigo-600"/>
                 <span>Аналіз інфраструктури магазину</span>
               </h2>
             </div>
@@ -476,7 +474,7 @@ export default function Home() {
                 onClick={() => setUseSpreadsheet(!useSpreadsheet)}
                 className="text-xs text-slate-500 hover:text-indigo-600 font-medium flex items-center space-x-1 transition cursor-pointer"
               >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
+                <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600"/>
                 <span>{useSpreadsheet ? 'Сховати таблицю' : '+ Google Таблиця (Опційно)'}</span>
               </button>
             </div>
@@ -485,7 +483,7 @@ export default function Home() {
           <div className="space-y-4">
             <div className="space-y-1.5">
               <label className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
-                <Globe className="w-4 h-4 text-indigo-600" />
+                <Globe className="w-4 h-4 text-indigo-600"/>
                 Головна адреса магазину
               </label>
               <input
@@ -500,7 +498,7 @@ export default function Home() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1 border-t border-slate-100/60 mt-2">
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-500 flex items-center gap-1">
-                  <Package className="w-3.5 h-3.5 text-slate-400" />
+                  <Package className="w-3.5 h-3.5 text-slate-400"/>
                   Посилання на картку товару (Опційно)
                 </label>
                 <input
@@ -514,7 +512,7 @@ export default function Home() {
 
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-500 flex items-center gap-1">
-                  <Tag className="w-3.5 h-3.5 text-slate-400" />
+                  <Tag className="w-3.5 h-3.5 text-slate-400"/>
                   Посилання на колекцію (Опційно)
                 </label>
                 <input
@@ -534,13 +532,13 @@ export default function Home() {
               onClick={handleRunAudit}
               className="w-full sm:w-auto px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium text-xs sm:text-sm transition shadow-xs flex items-center justify-center space-x-2 disabled:opacity-60 cursor-pointer active:scale-98 shrink-0"
             >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw \${isLoading ''}`} 'animate-spin' : ? className="{`w-4" h-4/>
               <span>{isLoading ? 'Генеруємо звіт...' : 'Згенерувати аудит магазину'}</span>
             </button>
 
             {statusMessage && (
               <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0"/>
                 <span>{statusMessage}</span>
               </div>
             )}
@@ -550,7 +548,7 @@ export default function Home() {
             <div className="p-3.5 bg-indigo-50/40 border border-indigo-100 rounded-xl space-y-2 text-xs mt-3">
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-indigo-950 flex items-center gap-1.5">
-                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-600"/>
                   Посилання на Google Таблицю (Google Sheets)
                 </span>
                 <span className="text-[11px] text-slate-500">Доступ: «Усі, хто має посилання»</span>
@@ -560,7 +558,7 @@ export default function Home() {
                   type="text"
                   value={sheetUrl}
                   onChange={(e) => setSheetUrl(e.target.value)}
-                  placeholder="https://docs.google.com/spreadsheets/d/1I4kxT657W2.../edit#gid=1420783045"
+                  placeholder="[https://docs.google.com/spreadsheets/d/1I4kxT657W2.../edit#gid=1420783045](https://docs.google.com/spreadsheets/d/1I4kxT657W2.../edit#gid=1420783045)"
                   className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-2 text-xs text-slate-800 placeholder-slate-400 font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
@@ -577,10 +575,10 @@ export default function Home() {
             <div>
               <div className="flex items-center space-x-2 mb-1 flex-wrap">
                 <span className="text-xs font-semibold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-100 flex items-center gap-1">
-                  <ShoppingBag className="w-3 h-3" /> Shopify Health Report
+                  <ShoppingBag className="w-3 h-3"/> Shopify Health Report
                 </span>
                 <span className="text-xs text-slate-400 flex items-center gap-1">
-                  <Calendar className="w-3 h-3" /> {DEFAULT_AUDIT_REPORT.date}
+                  <Calendar className="w-3 h-3"/> {DEFAULT_AUDIT_REPORT.date}
                 </span>
               </div>
               <h1 className="text-xl font-bold text-slate-900 tracking-tight">
@@ -611,7 +609,7 @@ export default function Home() {
           </div>
 
           <div className="mt-4 p-3 rounded-xl bg-amber-50/70 border border-amber-200/80 text-xs text-amber-900 flex items-start space-x-2">
-            <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5"/>
             <div>
               <span className="font-bold">Підсумок для клієнта: </span>
               {DEFAULT_AUDIT_REPORT.summary}
@@ -642,7 +640,7 @@ export default function Home() {
                     : 'border-transparent text-slate-500 hover:text-slate-900'
                 }`}
               >
-                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
+                <Icon ${isActive 'text-indigo-600' 'text-slate-400'}`} : ? className="{`w-3.5" h-3.5/>
                 <span>{tab.label}</span>
               </button>
             );
@@ -758,7 +756,7 @@ export default function Home() {
                   <tbody className="divide-y divide-slate-100 text-slate-700">
                     <tr className="hover:bg-slate-50/60 cursor-pointer" onClick={() => setActiveTab('analytics')}>
                       <td className="py-3.5 px-4 font-semibold text-slate-900 flex items-center gap-2">
-                        <ShieldAlert className="w-4 h-4 text-rose-500" />
+                        <ShieldAlert className="w-4 h-4 text-rose-500"/>
                         <span>Аналітика, TikTok & Згода (GDPR)</span>
                       </td>
                       <td className="py-3.5 px-4">
@@ -772,7 +770,7 @@ export default function Home() {
 
                     <tr className="hover:bg-slate-50/60 cursor-pointer" onClick={() => setActiveTab('shopify')}>
                       <td className="py-3.5 px-4 font-semibold text-slate-900 flex items-center gap-2">
-                        <ShoppingBag className="w-4 h-4 text-amber-500" />
+                        <ShoppingBag className="w-4 h-4 text-amber-500"/>
                         <span>Специфіка Shopify (Web Pixels, App Bloat, Canonical)</span>
                       </td>
                       <td className="py-3.5 px-4">
@@ -786,7 +784,7 @@ export default function Home() {
 
                     <tr className="hover:bg-slate-50/60 cursor-pointer" onClick={() => setActiveTab('performance')}>
                       <td className="py-3.5 px-4 font-semibold text-slate-900 flex items-center gap-2">
-                        <Gauge className="w-4 h-4 text-amber-500" />
+                        <Gauge className="w-4 h-4 text-amber-500"/>
                         <span>Швидкість сторінок (PDP / PLP / Home)</span>
                       </td>
                       <td className="py-3.5 px-4">
@@ -800,7 +798,7 @@ export default function Home() {
 
                     <tr className="hover:bg-slate-50/60 cursor-pointer" onClick={() => setActiveTab('seo')}>
                       <td className="py-3.5 px-4 font-semibold text-slate-900 flex items-center gap-2">
-                        <BarChart3 className="w-4 h-4 text-indigo-500" />
+                        <BarChart3 className="w-4 h-4 text-indigo-500"/>
                         <span>SEO, AI & Каталог</span>
                       </td>
                       <td className="py-3.5 px-4">
@@ -814,7 +812,7 @@ export default function Home() {
 
                     <tr className="hover:bg-slate-50/60 cursor-pointer" onClick={() => setActiveTab('ux')}>
                       <td className="py-3.5 px-4 font-semibold text-slate-900 flex items-center gap-2">
-                        <Smartphone className="w-4 h-4 text-emerald-500" />
+                        <Smartphone className="w-4 h-4 text-emerald-500"/>
                         <span>UX/UI & Мобільна ергономіка</span>
                       </td>
                       <td className="py-3.5 px-4">
@@ -1090,4 +1088,3 @@ export default function Home() {
     </div>
   );
 }
-```eof
