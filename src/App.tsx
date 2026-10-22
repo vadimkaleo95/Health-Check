@@ -25,15 +25,7 @@ import {
   Zap,
   ExternalLink
 } from 'lucide-react';
-
-interface ToolStatus {
-  name: string;
-  installed: boolean;
-  type: 'native_app' | 'hardcode' | 'not_detected';
-  statusText: string;
-  status: 'pass' | 'warn' | 'fail';
-  channel: string;
-}
+import { applyNetworkEvidence, detectAnalyticsFromHtml, type ToolStatus } from './analyticsDetect';
 
 interface PageMetric {
   name: string;
@@ -122,7 +114,7 @@ export default function Home() {
   };
 
   // 1. Реальний аналізатор коду сторінки (Shopify Web Pixels vs Direct Hardcode)
-  const analyzeStoreHtml = async (cleanUrl: string) => {
+  const analyzeStoreHtml = async (cleanUrl: string): Promise<ToolStatus[]> => {
     try {
       // Використовуємо надійний публічний CORS-проксі для читання вихідного HTML магазину
       const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(cleanUrl)}`;
@@ -158,79 +150,17 @@ export default function Home() {
           : "Увага: прямий тег <link rel=\"canonical\"> не знайдено на головній сторінці."
       });
 
-      // Перевірка архітектури Shopify Web Pixels проти прямого Hardcode
-      const hasShopifyWebPixels = html.includes('web-pixels-manager') || html.includes('shopify-buy') || html.includes('shopify.customerEvents');
-      const hasHardcodedGtag = html.includes('googletagmanager.com/gtag/js') || html.includes('gtag(');
-      const hasHardcodedMeta = html.includes('connect.facebook.net') || html.includes('fbq(');
-      const hasHardcodedTikTok = html.includes('analytics.tiktok.com') || html.includes('ttq.load');
-      const hasHardcodedClarity = html.includes('clarity.ms/tag');
-      const hasGSCMeta = html.includes('google-site-verification');
-
-      const updatedTools: ToolStatus[] = [
-        {
-          name: "Google Analytics 4 (GA4)",
-          installed: hasHardcodedGtag || hasShopifyWebPixels,
-          type: hasHardcodedGtag ? "hardcode" : hasShopifyWebPixels ? "native_app" : "not_detected",
-          statusText: hasHardcodedGtag 
-            ? "⚠️ Знайдено прямий хардкод gtag.js у theme.liquid (Ризик збоїв на оновленому checkout)"
-            : hasShopifyWebPixels 
-              ? "✅ Підключено через Shopify Google Channel / Web Pixels API" 
-              : "❌ Не знайдено слідів підключення GA4",
-          status: hasHardcodedGtag ? "warn" : hasShopifyWebPixels ? "pass" : "fail",
-          channel: "Web"
-        },
-        {
-          name: "Meta Pixel (Facebook / Instagram)",
-          installed: hasHardcodedMeta || hasShopifyWebPixels,
-          type: hasHardcodedMeta ? "hardcode" : hasShopifyWebPixels ? "native_app" : "not_detected",
-          statusText: hasHardcodedMeta
-            ? "⚠️ Прямий виклик fbq() у theme.liquid. Server-Side CAPI не активний"
-            : hasShopifyWebPixels
-              ? "✅ Працює через нативний Shopify Facebook App (Рекомендовано)"
-              : "❌ Meta Pixel не виявлено",
-          status: hasHardcodedMeta ? "warn" : hasShopifyWebPixels ? "pass" : "warn",
-          channel: "Browser only"
-        },
-        {
-          name: "TikTok Pixel",
-          installed: hasHardcodedTikTok,
-          type: hasHardcodedTikTok ? "hardcode" : "not_detected",
-          statusText: hasHardcodedTikTok 
-            ? "⚠️ Виявлено прямий скрипт TikTok у темі. Cookie _ttp ставиться до згоди користувача" 
-            : "⚪ TikTok Pixel відсутній або підключений через зовнішній Web Pixel",
-          status: hasHardcodedTikTok ? "warn" : "pass",
-          channel: "Browser only"
-        },
-        {
-          name: "Microsoft Clarity",
-          installed: hasHardcodedClarity,
-          type: hasHardcodedClarity ? "hardcode" : "not_detected",
-          statusText: hasHardcodedClarity 
-            ? "❌ Вантажиться без згоди користувача (Ризик штрафів GDPR)" 
-            : "⚪ Clarity не використовується",
-          status: hasHardcodedClarity ? "fail" : "pass",
-          channel: "Web"
-        },
-        {
-          name: "Google Search Console",
-          installed: hasGSCMeta,
-          type: hasGSCMeta ? "native_app" : "not_detected",
-          statusText: hasGSCMeta 
-            ? "✅ Мета-тег google-site-verification присутній" 
-            : "⚠️ Верифікаційний тег відсутній у коді (можливо підтверджено через DNS)",
-          status: hasGSCMeta ? "pass" : "warn",
-          channel: "Search"
-        }
-      ];
-
+      const updatedTools = detectAnalyticsFromHtml(html);
       setAnalyticsTools(updatedTools);
 
       const host = new URL(cleanUrl).hostname.replace('www.', '');
       const guessedBrand = host.split('.')[0];
       setBrandName(guessedBrand.charAt(0).toUpperCase() + guessedBrand.slice(1));
+      return updatedTools;
 
     } catch (e) {
       console.warn("HTML Direct analysis fallback notice:", e);
+      return [];
     }
   };
 
@@ -260,8 +190,8 @@ export default function Home() {
     }, 600);
 
     try {
-      // 1. Аналізуємо вихідний HTML магазину
-      await analyzeStoreHtml(cleanHome);
+      // 1. Аналізуємо вихідний HTML магазину (Web Pixels vs hardcode)
+      const htmlTools = await analyzeStoreHtml(cleanHome);
 
       // 2. Робимо реальний одиночний запит до Google PageSpeed API (Mobile Strategy)
       const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(cleanHome)}&strategy=mobile`;
@@ -345,6 +275,13 @@ export default function Home() {
       };
 
       setPerfData(updatedPerf);
+
+      const networkUrls: string[] = (audits?.['network-requests']?.details?.items || [])
+        .map((item: { url?: string }) => item.url || '')
+        .filter(Boolean);
+      if (htmlTools.length) {
+        setAnalyticsTools(applyNetworkEvidence(htmlTools, networkUrls));
+      }
 
       // Рахуємо динамічний зважений бал здоров'я сайту
       const finalHealthScore = Math.round((realMobileScore * 0.45) + (realA11yScore * 0.35) + 15);
@@ -671,6 +608,7 @@ export default function Home() {
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-900">
               <span className="font-bold">🛍️ Чому важливий спосіб підключення: </span>
               Shopify активно переводить усі магазини на новий <strong>Checkout Extensibility</strong>. Скрипти, підключені прямим кодом у <code>theme.liquid</code>, блокуються на сторінці оплати! Усі пікселі (Meta, GA4, TikTok) повинні бути підключені через офіційні Shopify Apps або Web Pixels API.
+              {' '}Наявність <code>web-pixels-manager</code> ще не означає, що GA4/Meta встановлені — читаємо <code>webPixelsConfigList</code> і мережеві запити Lighthouse. CAPI з вітрини не видно.
             </div>
 
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
@@ -693,6 +631,10 @@ export default function Home() {
                           {t.type === 'native_app' ? (
                             <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold text-[10px]">
                               Shopify App / Web Pixel
+                            </span>
+                          ) : t.type === 'hybrid' ? (
+                            <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-semibold text-[10px]">
+                              Native + Hardcode (дубль)
                             </span>
                           ) : t.type === 'hardcode' ? (
                             <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 font-semibold text-[10px]">
