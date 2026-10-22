@@ -13,16 +13,17 @@ import {
   ListTodo, 
   Smartphone, 
   ShoppingBag, 
-  Download, 
   Globe, 
-  Package, 
-  Tag, 
   Activity, 
-  ExternalLink 
+  ExternalLink,
+  Terminal,
+  AlertCircle,
+  CheckCircle,
+  HelpCircle
 } from 'lucide-react';
 import { TabType, ToolStatus, PerformanceState, SeoMetricsState, ActionPlanTask } from './types';
 import { applyNetworkEvidence } from './analyticsDetect';
-import { extractDomainInfo, parseStoreHtml, runGooglePageSpeed, generateDynamicFallback } from './auditEngine';
+import { extractDomainInfo, parseStoreHtml, runGooglePageSpeed, generateDynamicFallback, AuditLog } from './auditEngine';
 import { AuditTabs } from './AuditTabs';
 
 const AUDIT_STEPS = [
@@ -45,13 +46,22 @@ const DEFAULT_TASKS: ActionPlanTask[] = [
 
 export default function App() {
   const [homeUrl, setHomeUrl] = useState("guniaproject.com.ua");
-  const [productUrl, setProductUrl] = useState("");
-  const [collectionUrl, setCollectionUrl] = useState("");
 
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  // Журнал діагностики для відлагодження
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([
+    {
+      source: 'Google PageSpeed',
+      status: 'success',
+      message: 'Система готова до запуску. Введіть адресу Shopify магазину.',
+      timestamp: 'Старт'
+    }
+  ]);
+  const [showDevLogs, setShowDevLogs] = useState(true);
 
   const [activeTab, setActiveTab] = useState<TabType>('summary');
   const [planFilter, setPlanFilter] = useState<'all' | 'Dev Team' | 'SEO / Content' | 'Design / UX'>('all');
@@ -75,9 +85,7 @@ export default function App() {
     summary: "Офіційний Google PageSpeed: оцінка 58/100, LCP 3.9 c.",
     salesHook: "⚡ Кожна додаткова секунда затримки мобільного першого екрана зрізає конверсію на 7-10%.",
     pages: [
-      { name: "Головна сторінка (Google API)", type: "Home", mobileScore: 58, desktopScore: 92, lcp: "3.9 c", tbt: "480 мс", a11y: 96, share: "22% трафіку" },
-      { name: "Картка товару (PDP - Оцінка)", type: "Product", mobileScore: 48, desktopScore: 84, lcp: "4.8 c", tbt: "720 мс", a11y: 98, share: "54% трафіку (Реклама)" },
-      { name: "Каталог колекції (PLP - Оцінка)", type: "Collection", mobileScore: 64, desktopScore: 95, lcp: "3.4 c", tbt: "310 мс", a11y: 90, share: "24% трафіку" }
+      { name: "Головна сторінка (Google Lighthouse Live)", type: "Home", mobileScore: 58, desktopScore: 92, lcp: "3.9 c", tbt: "480 мс", a11y: 96, share: "Основний вхід" }
     ],
     blockers: [
       "Синхронні JS-скрипти теми блокують First Contentful Paint",
@@ -111,6 +119,8 @@ export default function App() {
     setCurrentHost(host);
     setAuditDate(new Date().toLocaleDateString('uk-UA', { month: 'long', year: 'numeric' }));
 
+    const newLogs: AuditLog[] = [];
+
     const progressInterval = setInterval(() => {
       setLoadingProgress((prev) => {
         if (prev < 90) {
@@ -125,33 +135,47 @@ export default function App() {
 
     let detectedTools: ToolStatus[] = [];
     try {
-      const { seo, tools } = await parseStoreHtml(cleanHome, host, brand);
+      const { seo, tools, log: htmlLog } = await parseStoreHtml(cleanHome, host, brand);
       setSeoMetrics(seo);
       setAnalyticsTools(tools);
       detectedTools = tools;
-    } catch (e) {
-      console.warn("HTML analysis error:", e);
+      newLogs.push(htmlLog);
+    } catch (e: any) {
+      newLogs.push({
+        source: 'HTML Proxy',
+        status: 'error',
+        message: `Помилка аналізу вихідного коду: ${e?.message || 'невідома помилка'}`,
+        timestamp: new Date().toLocaleTimeString('uk-UA')
+      });
     }
 
     try {
       setLoadingStep(1);
-      const { perfData: livePerf, finalScore, networkUrls } = await runGooglePageSpeed(cleanHome, host, brand);
+      const { perfData: livePerf, finalScore, networkUrls, log: pageSpeedLog } = await runGooglePageSpeed(cleanHome, host, brand);
       setPerfData(livePerf);
       setCurrentScore(finalScore);
+      newLogs.push(pageSpeedLog);
 
       if (detectedTools.length && networkUrls.length) {
         setAnalyticsTools(applyNetworkEvidence(detectedTools, networkUrls));
+        newLogs.push({
+          source: 'Analytics Scanner',
+          status: 'success',
+          message: `Звірено результати з ${networkUrls.length} мережевими викликами Lighthouse.`,
+          timestamp: new Date().toLocaleTimeString('uk-UA')
+        });
       }
       setStatusMessage(`Аудит для ${host} успішно сформовано наживо через Google PageSpeed!`);
-    } catch (err) {
-      console.warn("PageSpeed fallback applied:", err);
-      const { perfData: fallbackPerf, finalScore: fallbackScore } = generateDynamicFallback(host, brand);
+    } catch (err: any) {
+      const { perfData: fallbackPerf, finalScore: fallbackScore, log: fallbackLog } = generateDynamicFallback(host, brand, err?.message || 'Timeout / Rate limit');
       setPerfData(fallbackPerf);
       setCurrentScore(fallbackScore);
-      setStatusMessage(`Аудит для ${host} сформовано (аналіз ресурсів та структури)!`);
+      newLogs.push(fallbackLog);
+      setStatusMessage(`Аудит для ${host} сформовано (застосовано резервну оцінку через збій Google API)!`);
     } finally {
       clearInterval(progressInterval);
       setLoadingProgress(100);
+      setAuditLogs(newLogs);
       setTimeout(() => setIsLoading(false), 350);
     }
   };
@@ -171,22 +195,10 @@ export default function App() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50/70 text-slate-900 font-sans antialiased selection:bg-indigo-100 selection:text-indigo-900 print:bg-white print:text-black">
+    <div className="min-h-screen bg-slate-50/70 text-slate-900 font-sans antialiased selection:bg-indigo-100 selection:text-indigo-900">
       
-      {/* Спеціальні стилі друку А4 */}
-      <style dangerouslySetInnerHTML={{ __html: `
-        @media print {
-          @page { size: A4; margin: 12mm; }
-          header, .no-print, nav, button, input { display: none !important; }
-          body { background: white !important; color: #0f172a !important; font-size: 11pt !important; }
-          .print-section { page-break-inside: avoid; margin-bottom: 1.5rem !important; border: 1px solid #cbd5e1 !important; box-shadow: none !important; }
-          table { width: 100% !important; border-collapse: collapse !important; }
-          th, td { padding: 6px 8px !important; border-bottom: 1px solid #e2e8f0 !important; }
-        }
-      `}} />
-
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs no-print">
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-xs">
@@ -201,31 +213,22 @@ export default function App() {
               </span>
             </div>
           </div>
-
-          <button
-            onClick={() => window.print()}
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-medium shadow-xs transition active:scale-95 cursor-pointer"
-            title="Завантажити звіт у PDF"
-          >
-            <Download className="w-4 h-4" />
-            <span>Завантажити PDF</span>
-          </button>
         </div>
       </header>
 
       {/* Main Container */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-5 print:p-0 print:space-y-4">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-5">
         
         {/* Input Bar */}
-        <section className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4 no-print">
+        <section className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
             <div>
               <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-700 flex items-center space-x-1.5">
                 <Search className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Аналіз інфраструктури магазину</span>
+                <span>Аналіз магазину</span>
               </h2>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                Введіть адресу Shopify магазину. Звіт, назва бренду та метрики генеруються динамічно.
+                Введіть адресу Shopify магазину. Звіт, назва бренду та метрики генеруються в реальному часі.
               </p>
             </div>
           </div>
@@ -234,7 +237,7 @@ export default function App() {
             <div className="space-y-1.5">
               <label className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
                 <Globe className="w-4 h-4 text-indigo-600" />
-                Головна адреса магазину для сканування
+                Адреса магазину для сканування
               </label>
               <div className="flex flex-col sm:flex-row gap-2.5">
                 <input
@@ -253,36 +256,6 @@ export default function App() {
                   <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
                   <span>{isLoading ? 'Аналізуємо...' : 'Запустити аудит'}</span>
                 </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1 border-t border-slate-100/70">
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-500 flex items-center gap-1">
-                  <Package className="w-3.5 h-3.5 text-slate-400" />
-                  Картка товару (PDP - Опційно)
-                </label>
-                <input
-                  type="text"
-                  value={productUrl}
-                  onChange={(e) => setProductUrl(e.target.value)}
-                  placeholder={`https://${currentHost}/products/...`}
-                  className="w-full bg-transparent border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600 font-mono focus:outline-none focus:border-indigo-400 transition"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-500 flex items-center gap-1">
-                  <Tag className="w-3.5 h-3.5 text-slate-400" />
-                  Каталог колекції (PLP - Опційно)
-                </label>
-                <input
-                  type="text"
-                  value={collectionUrl}
-                  onChange={(e) => setCollectionUrl(e.target.value)}
-                  placeholder={`https://${currentHost}/collections/all`}
-                  className="w-full bg-transparent border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600 font-mono focus:outline-none focus:border-indigo-400 transition"
-                />
               </div>
             </div>
           </div>
@@ -317,7 +290,7 @@ export default function App() {
         </section>
 
         {/* Score Card */}
-        <section className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs print-section">
+        <section className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
             <div>
               <div className="flex items-center space-x-2 mb-1 flex-wrap">
@@ -370,7 +343,7 @@ export default function App() {
         </section>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-slate-200 bg-transparent space-x-1 overflow-x-auto text-xs sm:text-sm no-print">
+        <div className="flex border-b border-slate-200 bg-transparent space-x-1 overflow-x-auto text-xs sm:text-sm">
           {tabsConfig.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -404,9 +377,69 @@ export default function App() {
           planFilter={planFilter}
           setPlanFilter={setPlanFilter}
         />
+
+        {/* Секція діагностики джерел даних (System Health & Developer Logs) */}
+        <section className="bg-slate-900 text-slate-200 border border-slate-800 rounded-2xl p-4 shadow-sm text-xs space-y-3">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+            <div className="flex items-center space-x-2">
+              <Terminal className="w-4 h-4 text-emerald-400" />
+              <span className="font-bold text-slate-100 tracking-tight">
+                Діагностика джерел даних (Dev / QA Mode)
+              </span>
+              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+                Автоматичний контроль правдивості
+              </span>
+            </div>
+
+            <button
+              onClick={() => setShowDevLogs(!showDevLogs)}
+              className="text-[11px] text-slate-400 hover:text-indigo-400 transition cursor-pointer"
+            >
+              {showDevLogs ? 'Приховати логи' : 'Показати деталі'}
+            </button>
+          </div>
+
+          {showDevLogs && (
+            <div className="space-y-2">
+              <p className="text-[11px] text-slate-400">
+                ℹ️ Цей блок показує, чи вдалося отримати пряму відповідь від Google Lighthouse та завантажити вихідний HTML магазину без блокувань Cloudflare.
+              </p>
+
+              <div className="space-y-1.5 font-mono text-[11px]">
+                {auditLogs.map((log, i) => (
+                  <div 
+                    key={i} 
+                    className={`p-2.5 rounded-lg border flex items-start space-x-2.5 ${
+                      log.status === 'success' 
+                        ? 'bg-emerald-950/40 border-emerald-800/60 text-emerald-300' 
+                        : log.status === 'warning' 
+                          ? 'bg-amber-950/40 border-amber-800/60 text-amber-300' 
+                          : 'bg-rose-950/40 border-rose-800/60 text-rose-300'
+                    }`}
+                  >
+                    {log.status === 'success' && <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />}
+                    {log.status === 'warning' && <HelpCircle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />}
+                    {log.status === 'error' && <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />}
+                    
+                    <div className="flex-1 space-y-0.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold uppercase tracking-wider text-[10px]">
+                          [{log.source}]
+                        </span>
+                        <span className="text-slate-500 text-[10px]">{log.timestamp}</span>
+                      </div>
+                      <p className="leading-relaxed">{log.message}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+
       </main>
 
-      <footer className="mt-8 border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-400 no-print">
+      <footer className="mt-8 border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-400">
         Shopify Health Check Engine • Live Google PageSpeed & Web Pixels Analyzer
       </footer>
     </div>
