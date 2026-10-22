@@ -1,6 +1,13 @@
 import { PerformanceState, SeoMetricsState } from './types';
 import { detectAnalyticsFromHtml, ToolStatus } from './analyticsDetect';
 
+export interface AuditLog {
+  source: 'HTML Proxy' | 'Google PageSpeed' | 'Analytics Scanner';
+  status: 'success' | 'warning' | 'error';
+  message: string;
+  timestamp: string;
+}
+
 export function extractDomainInfo(rawUrl: string): { host: string; brand: string } {
   try {
     let clean = rawUrl.trim();
@@ -18,35 +25,41 @@ export function extractDomainInfo(rawUrl: string): { host: string; brand: string
   }
 }
 
-export async function fetchStoreHtml(targetUrl: string): Promise<string> {
+export async function fetchStoreHtml(targetUrl: string): Promise<{ html: string; usedProxy: string }> {
   const proxies = [
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
-    `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`
+    { name: 'allorigins.win', url: `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}` },
+    { name: 'corsproxy.io', url: `https://corsproxy.io/?${encodeURIComponent(targetUrl)}` }
   ];
+
+  const errors: string[] = [];
 
   for (const proxy of proxies) {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 6500);
-      const res = await fetch(proxy, { signal: controller.signal });
+      const res = await fetch(proxy.url, { signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) {
         const text = await res.text();
-        if (text && text.length > 200) return text;
+        if (text && text.length > 200) {
+          return { html: text, usedProxy: proxy.name };
+        }
       }
-    } catch {
-      // Пробуємо наступний проксі у списку
+      errors.push(`${proxy.name}: HTTP ${res.status}`);
+    } catch (e: any) {
+      errors.push(`${proxy.name}: ${e?.message || 'таймаут/відмова'}`);
     }
   }
-  throw new Error("HTML fetch error through proxies");
+  throw new Error(`Усі проксі відхилили запит (${errors.join('; ')}). Можливо магазин захищено Cloudflare.`);
 }
 
 export async function parseStoreHtml(cleanUrl: string, host: string, brand: string): Promise<{
   seo: SeoMetricsState;
   tools: ToolStatus[];
+  log: AuditLog;
 }> {
   try {
-    const html = await fetchStoreHtml(cleanUrl);
+    const { html, usedProxy } = await fetchStoreHtml(cleanUrl);
 
     const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
     const realTitle = titleMatch ? titleMatch[1].trim() : `${brand} — Офіційний сайт`;
@@ -69,9 +82,15 @@ export async function parseStoreHtml(cleanUrl: string, host: string, brand: stri
           ? `Тег canonical знайдено: ${canonicalMatch ? canonicalMatch[1] : 'Налаштовано'}` 
           : "Увага: прямий тег <link rel=\"canonical\"> не знайдено на головній сторінці."
       },
-      tools: detectAnalyticsFromHtml(html)
+      tools: detectAnalyticsFromHtml(html),
+      log: {
+        source: 'HTML Proxy',
+        status: 'success',
+        message: `HTML сторінки завантажено через ${usedProxy}. Розмір: ${Math.round(html.length / 1024)} Кб. Title та теги підтверджено.`,
+        timestamp: new Date().toLocaleTimeString('uk-UA')
+      }
     };
-  } catch {
+  } catch (err: any) {
     return {
       seo: {
         titleText: `${brand} — Офіційний інтернет-магазин (${host})`,
@@ -87,7 +106,13 @@ export async function parseStoreHtml(cleanUrl: string, host: string, brand: stri
         { name: "TikTok Pixel", installed: false, type: "not_detected", statusText: "Слідів браузерного пікселя TikTok у публічному HTML не виявлено.", status: "warn", channel: "—" },
         { name: "Microsoft Clarity", installed: false, type: "not_detected", statusText: "Скрипти запису сесій Clarity відсутні.", status: "pass", channel: "—" },
         { name: "Google Search Console", installed: true, type: "native_app", statusText: "Верифікація підтверджується через DNS або Shopify Admin.", status: "pass", channel: "Search" }
-      ]
+      ],
+      log: {
+        source: 'HTML Proxy',
+        status: 'warning',
+        message: `Не вдалося завантажити сирий HTML для ${host} (${err?.message || 'захист Cloudflare'}). Застосовано стандартні шаблони.`,
+        timestamp: new Date().toLocaleTimeString('uk-UA')
+      }
     };
   }
 }
@@ -96,10 +121,13 @@ export async function runGooglePageSpeed(cleanUrl: string, host: string, brand: 
   perfData: PerformanceState;
   finalScore: number;
   networkUrls: string[];
+  log: AuditLog;
 }> {
   const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(cleanUrl)}&strategy=mobile`;
   const res = await fetch(apiUrl);
-  if (!res.ok) throw new Error(`Google PageSpeed HTTP ${res.status}`);
+  if (!res.ok) {
+    throw new Error(`Google PageSpeed HTTP ${res.status} (${res.statusText || 'Rate limit або помилка сервера Google'})`);
+  }
 
   const json = await res.json();
   const lighthouse = json.lighthouseResult;
@@ -118,7 +146,7 @@ export async function runGooglePageSpeed(cleanUrl: string, host: string, brand: 
   const blockers: string[] = [];
   const renderBlockingAudit = audits?.['render-blocking-resources'];
   if (renderBlockingAudit?.details?.items?.length) {
-    renderBlockingAudit.details.items.slice(0, 3).forEach((item: any) => {
+    renderBlockingAudit.details.items.slice(0, 4).forEach((item: any) => {
       const fileName = item.url ? item.url.split('/').pop().split('?')[0] : 'theme-script.js';
       const wasted = Math.round(item.wastedMs || 0);
       blockers.push(`Блокуючий ресурс: ${fileName} (${wasted} мс затримки першого екрана)`);
@@ -127,46 +155,23 @@ export async function runGooglePageSpeed(cleanUrl: string, host: string, brand: 
     blockers.push("Критичних синхронних блокуючих ресурсів у блоці <head> не виявлено.");
   }
 
-  const estimatedProdScore = Math.max(15, realMobileScore - 9);
-  const estimatedColScore = Math.min(100, realMobileScore + 7);
-
   const perfData: PerformanceState = {
     status: realMobileScore >= 75 ? 'good' : realMobileScore >= 45 ? 'warning' : 'critical',
     statusLabel: realMobileScore >= 75 ? 'Добре' : realMobileScore >= 45 ? 'Потребує уваги' : 'Критично',
-    summary: `Офіційний Google PageSpeed для ${host}: оцінка ${realMobileScore}/100, LCP ${realLcpDisplay}, затримка ${realTbtDisplay}.`,
+    summary: `Офіційний Google PageSpeed для ${host}: оцінка ${realMobileScore}/100, LCP ${realLcpDisplay}, затримка інтерактивності ${realTbtDisplay}.`,
     salesHook: realMobileScore < 50
       ? `⚡ Мобільна швидкість (${realMobileScore}/100) гальмує конверсії бренду ${brand}. Понад 40% користувачів реклами закривають сайт через затримку.`
       : `⚡ Швидкість ${brand} на належному рівні (${realMobileScore}/100). Основна точка росту — зменшення блокуючих скриптів віджетів.`,
     pages: [
       {
-        name: `${host} (Головна)`,
+        name: `${host} (Головна сторінка)`,
         type: "Home",
         mobileScore: realMobileScore,
         desktopScore: Math.min(100, realMobileScore + 32),
         lcp: realLcpDisplay,
         tbt: realTbtDisplay,
         a11y: realA11yScore,
-        share: "22% трафіку"
-      },
-      {
-        name: "Картка товару (PDP - Оцінка)",
-        type: "Product",
-        mobileScore: estimatedProdScore,
-        desktopScore: Math.min(100, estimatedProdScore + 26),
-        lcp: `${((realLcpNumeric + 700) / 1000).toFixed(1)} c`,
-        tbt: `${realTbtNumeric + 160} мс`,
-        a11y: realA11yScore,
-        share: "54% трафіку (Реклама)"
-      },
-      {
-        name: "Каталог колекції (PLP - Оцінка)",
-        type: "Collection",
-        mobileScore: estimatedColScore,
-        desktopScore: Math.min(100, estimatedColScore + 28),
-        lcp: `${Math.max(2.0, (realLcpNumeric - 400) / 1000).toFixed(1)} c`,
-        tbt: `${Math.max(90, realTbtNumeric - 100)} мс`,
-        a11y: realA11yScore,
-        share: "24% трафіку"
+        share: "Головна"
       }
     ],
     blockers
@@ -177,10 +182,25 @@ export async function runGooglePageSpeed(cleanUrl: string, host: string, brand: 
     .filter(Boolean);
 
   const finalScore = Math.min(100, Math.max(25, Math.round((realMobileScore * 0.45) + (realA11yScore * 0.35) + 16)));
-  return { perfData, finalScore, networkUrls };
+  
+  return { 
+    perfData, 
+    finalScore, 
+    networkUrls,
+    log: {
+      source: 'Google PageSpeed',
+      status: 'success',
+      message: `Отримано наживо з Google Lighthouse (Mobile): бал ${realMobileScore}/100, LCP ${realLcpDisplay}, зафіксовано ${networkUrls.length} мережевих викликів.`,
+      timestamp: new Date().toLocaleTimeString('uk-UA')
+    }
+  };
 }
 
-export function generateDynamicFallback(host: string, brand: string): { perfData: PerformanceState; finalScore: number } {
+export function generateDynamicFallback(host: string, brand: string, errorReason: string): { 
+  perfData: PerformanceState; 
+  finalScore: number;
+  log: AuditLog;
+} {
   const hash = host.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
   const domainMobileScore = 42 + (hash % 41);
   const domainA11y = 86 + (hash % 12);
@@ -194,34 +214,14 @@ export function generateDynamicFallback(host: string, brand: string): { perfData
       salesHook: `⚡ Оптимізація першого екрана ${brand} (${domainMobileScore}/100) здатна зберегти до 15% втрачених лідів з реклами.`,
       pages: [
         {
-          name: `${host} (Головна)`,
+          name: `${host} (Головна сторінка)`,
           type: "Home",
           mobileScore: domainMobileScore,
           desktopScore: Math.min(100, domainMobileScore + 32),
           lcp: `${domainLcp} c`,
           tbt: `${340 + (hash % 200)} мс`,
           a11y: domainA11y,
-          share: "22% трафіку"
-        },
-        {
-          name: "Картка товару (PDP - Оцінка)",
-          type: "Product",
-          mobileScore: Math.max(20, domainMobileScore - 8),
-          desktopScore: Math.min(100, domainMobileScore + 24),
-          lcp: `${(parseFloat(domainLcp) + 0.8).toFixed(1)} c`,
-          tbt: `${480 + (hash % 200)} мс`,
-          a11y: domainA11y,
-          share: "54% трафіку (Реклама)"
-        },
-        {
-          name: "Каталог колекції (PLP - Оцінка)",
-          type: "Collection",
-          mobileScore: Math.min(100, domainMobileScore + 6),
-          desktopScore: Math.min(100, domainMobileScore + 34),
-          lcp: `${Math.max(1.9, parseFloat(domainLcp) - 0.5).toFixed(1)} c`,
-          tbt: "280 мс",
-          a11y: domainA11y,
-          share: "24% трафіку"
+          share: "Головна"
         }
       ],
       blockers: [
@@ -230,6 +230,12 @@ export function generateDynamicFallback(host: string, brand: string): { perfData
         "Аналітичні теги ініціалізуються до завершення побудови DOM-дерева"
       ]
     },
-    finalScore: Math.round((domainMobileScore * 0.5) + (domainA11y * 0.3) + 15)
+    finalScore: Math.round((domainMobileScore * 0.5) + (domainA11y * 0.3) + 15),
+    log: {
+      source: 'Google PageSpeed',
+      status: 'error',
+      message: `Помилка прямого виклику Google API (${errorReason}). Застосовано розрахункову модель домену ${host}.`,
+      timestamp: new Date().toLocaleTimeString('uk-UA')
+    }
   };
 }
