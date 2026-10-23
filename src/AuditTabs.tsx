@@ -280,7 +280,8 @@ export const AuditTabs: React.FC<AuditTabsProps> = ({
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
       {/* TAB 7: ACTION PLAN */}
       {activeTab === 'plan' && (
