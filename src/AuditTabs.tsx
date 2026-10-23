@@ -32,14 +32,7 @@ export const AuditTabs: React.FC<AuditTabsProps> = ({
   planFilter,
   setPlanFilter
 }) => {
-  const mainPage = perfData.pages[0] || {
-    name: currentHost,
-    mobileScore: 0,
-    desktopScore: 0,
-    lcp: '—',
-    tbt: '—',
-    a11y: 0
-  };
+  const pages = perfData.pages || [];
 
   return (
     <div className="space-y-4">
@@ -60,11 +53,11 @@ export const AuditTabs: React.FC<AuditTabsProps> = ({
                 <tr className="hover:bg-slate-50/60 cursor-pointer" onClick={() => setActiveTab('performance')}>
                   <td className="py-3.5 px-4 font-semibold text-slate-900 flex items-center gap-2">
                     <Gauge className="w-4 h-4 text-amber-500" />
-                    <span>Швидкість сторінки ({brandName})</span>
+                    <span>Швидкість сторінок ({brandName})</span>
                   </td>
                   <td className="py-3.5 px-4">
                     <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold border bg-amber-50 text-amber-700 border-amber-200">
-                      {mainPage.mobileScore} / 100
+                      {pages[0]?.mobileScore ?? 0} / 100
                     </span>
                   </td>
                   <td className="py-3.5 px-4">{perfData.summary}</td>
@@ -188,27 +181,25 @@ export const AuditTabs: React.FC<AuditTabsProps> = ({
           </div>
 
           <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
-            <h3 className="text-sm font-bold text-slate-900 mb-3">Швидкість сторінки магазину (Mobile Lighthouse)</h3>
-            <div className="max-w-md p-5 bg-slate-50 rounded-xl border border-slate-100 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-sm text-slate-900">{mainPage.name}</span>
-                <span className="text-[11px] text-indigo-600 font-semibold bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
-                  Мобільна стратегія
-                </span>
-              </div>
-              <div className="text-4xl font-black text-slate-800">
-                {mainPage.mobileScore} <span className="text-xs font-normal text-slate-400">/ 100</span>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 pt-2 border-t border-slate-200">
-                <div>
-                  <span className="text-slate-400 block text-[10px] uppercase">LCP (Перший екран):</span>
-                  <strong className="text-slate-800">{mainPage.lcp}</strong>
+            <h3 className="text-sm font-bold text-slate-900 mb-3">Швидкість ключових типів сторінок магазину (Mobile Lighthouse)</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {pages.map((pg, idx) => (
+                <div key={idx} className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-slate-900 truncate max-w-[170px]" title={pg.name}>
+                      {pg.name}
+                    </span>
+                    <span className="text-[10px] text-slate-400">{pg.share}</span>
+                  </div>
+                  <div className="text-3xl font-black text-slate-800">
+                    {pg.mobileScore} <span className="text-xs font-normal text-slate-400">моб. / 100</span>
+                  </div>
+                  <div className="text-[11px] text-slate-600 flex justify-between pt-1 border-t border-slate-200">
+                    <span>LCP: <strong>{pg.lcp}</strong></span>
+                    <span>Блокування: {pg.tbt}</span>
+                  </div>
                 </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px] uppercase">Блокування процесора (TBT):</span>
-                  <strong className="text-slate-800">{mainPage.tbt}</strong>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
 
@@ -289,8 +280,7 @@ export const AuditTabs: React.FC<AuditTabsProps> = ({
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* TAB 7: ACTION PLAN */}
       {activeTab === 'plan' && (
