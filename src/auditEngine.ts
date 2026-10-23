@@ -26,31 +26,37 @@ export function extractDomainInfo(rawUrl: string): { host: string; brand: string
 }
 
 export async function fetchStoreHtml(targetUrl: string): Promise<{ html: string; usedProxy: string }> {
-  const proxies = [
+  // 1. Перший пріоритет: власний безкоштовний Edge-ендпоінт Vercel (без блокувань CORS та з User-Agent Chrome)
+  const isVercel = typeof window !== 'undefined' && window.location.hostname !== 'localhost';
+  
+  const sources = [
+    ...(isVercel ? [{ name: 'Vercel Edge Proxy', url: `/api/fetch-html?url=${encodeURIComponent(targetUrl)}` }] : []),
     { name: 'allorigins.win', url: `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}` },
     { name: 'corsproxy.io', url: `https://corsproxy.io/?${encodeURIComponent(targetUrl)}` }
   ];
 
   const errors: string[] = [];
 
-  for (const proxy of proxies) {
+  for (const src of sources) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6500);
-      const res = await fetch(proxy.url, { signal: controller.signal });
+      const timeoutId = setTimeout(() => controller.abort(), 7000);
+      const res = await fetch(src.url, { signal: controller.signal });
       clearTimeout(timeoutId);
+      
       if (res.ok) {
         const text = await res.text();
-        if (text && text.length > 200) {
-          return { html: text, usedProxy: proxy.name };
+        if (text && text.length > 250 && !text.includes('Challenge Validation') && !text.includes('Just a moment...')) {
+          return { html: text, usedProxy: src.name };
         }
       }
-      errors.push(`${proxy.name}: HTTP ${res.status}`);
+      errors.push(`${src.name}: HTTP ${res.status}`);
     } catch (e: any) {
-      errors.push(`${proxy.name}: ${e?.message || 'таймаут/відмова'}`);
+      errors.push(`${src.name}: ${e?.message || 'таймаут/відмова'}`);
     }
   }
-  throw new Error(`Усі проксі відхилили запит (${errors.join('; ')}). Можливо магазин захищено Cloudflare.`);
+
+  throw new Error(`Усі проксі відхилили запит (${errors.join('; ')}). Магазин має суворий WAF/Cloudflare захист.`);
 }
 
 export async function parseStoreHtml(cleanUrl: string, host: string, brand: string): Promise<{
@@ -86,7 +92,7 @@ export async function parseStoreHtml(cleanUrl: string, host: string, brand: stri
       log: {
         source: 'HTML Proxy',
         status: 'success',
-        message: `HTML сторінки завантажено через ${usedProxy}. Розмір: ${Math.round(html.length / 1024)} Кб. Title та теги підтверджено.`,
+        message: `HTML сторінки завантажено через ${usedProxy}. Розмір коду: ${Math.round(html.length / 1024)} Кб. Title та пікселі розпізнано наживо.`,
         timestamp: new Date().toLocaleTimeString('uk-UA')
       }
     };
@@ -110,7 +116,7 @@ export async function parseStoreHtml(cleanUrl: string, host: string, brand: stri
       log: {
         source: 'HTML Proxy',
         status: 'warning',
-        message: `Не вдалося завантажити сирий HTML для ${host} (${err?.message || 'захист Cloudflare'}). Застосовано стандартні шаблони.`,
+        message: `Не вдалося завантажити HTML для ${host} (${err?.message || 'захист Cloudflare'}). Застосовано розрахункові шаблони.`,
         timestamp: new Date().toLocaleTimeString('uk-UA')
       }
     };
@@ -125,8 +131,12 @@ export async function runGooglePageSpeed(cleanUrl: string, host: string, brand: 
 }> {
   const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(cleanUrl)}&strategy=mobile`;
   const res = await fetch(apiUrl);
+  
   if (!res.ok) {
-    throw new Error(`Google PageSpeed HTTP ${res.status} (${res.statusText || 'Rate limit або помилка сервера Google'})`);
+    if (res.status === 429) {
+      throw new Error(`Google PageSpeed HTTP 429: тимчасовий ліміт запитів без API-ключа. Зачекайте 30 секунд.`);
+    }
+    throw new Error(`Google PageSpeed HTTP ${res.status} (${res.statusText || 'Помилка сервера Google'})`);
   }
 
   const json = await res.json();
@@ -158,10 +168,10 @@ export async function runGooglePageSpeed(cleanUrl: string, host: string, brand: 
   const perfData: PerformanceState = {
     status: realMobileScore >= 75 ? 'good' : realMobileScore >= 45 ? 'warning' : 'critical',
     statusLabel: realMobileScore >= 75 ? 'Добре' : realMobileScore >= 45 ? 'Потребує уваги' : 'Критично',
-    summary: `Офіційний Google PageSpeed для ${host}: оцінка ${realMobileScore}/100, LCP ${realLcpDisplay}, затримка інтерактивності ${realTbtDisplay}.`,
+    summary: `Офіційний Google PageSpeed для ${host}: оцінка ${realMobileScore}/100, LCP ${realLcpDisplay}, затримка ${realTbtDisplay}.`,
     salesHook: realMobileScore < 50
       ? `⚡ Мобільна швидкість (${realMobileScore}/100) гальмує конверсії бренду ${brand}. Понад 40% користувачів реклами закривають сайт через затримку.`
-      : `⚡ Швидкість ${brand} на належному рівні (${realMobileScore}/100). Основна точка росту — зменшення блокуючих скриптів віджетів.`,
+      : `⚡ Швидкість ${brand} на належному рівні (${realMobileScore}/100). Основна точка росту — оптимізація скриптів віджетів.`,
     pages: [
       {
         name: `${host} (Головна сторінка)`,
@@ -234,7 +244,7 @@ export function generateDynamicFallback(host: string, brand: string, errorReason
     log: {
       source: 'Google PageSpeed',
       status: 'error',
-      message: `Помилка прямого виклику Google API (${errorReason}). Застосовано розрахункову модель домену ${host}.`,
+      message: `Помилка виклику Google API (${errorReason}). Застосовано розрахункову модель домену ${host}.`,
       timestamp: new Date().toLocaleTimeString('uk-UA')
     }
   };
