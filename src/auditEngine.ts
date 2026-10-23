@@ -163,11 +163,12 @@ export async function parseStoreHtml(cleanUrl: string, host: string, brand: stri
   }
 }
 
-// Запит до одного URL в Google PageSpeed
-async function fetchSinglePageSpeed(url: string, apiKey: string) {
-  const apiKey = import.meta.env.VITE_GOOGLE_PAGESPEED_KEY || '';
-  const keyParam = apiKey ? `&key=${apiKey}` : '';
-  const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(cleanUrl)}&strategy=mobile${keyParam}`;
+// Запит до одного URL в Google PageSpeed (автоматично підтягує VITE_GOOGLE_PAGESPEED_KEY)
+async function fetchSinglePageSpeed(url: string) {
+  const envKey = import.meta.env.VITE_GOOGLE_PAGESPEED_KEY || '';
+  const keyParam = envKey ? `&key=${envKey}` : '';
+  const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&strategy=mobile${keyParam}`;
+  
   const res = await fetch(apiUrl);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return await res.json();
@@ -177,8 +178,7 @@ export async function runGooglePageSpeed(
   cleanUrl: string, 
   host: string, 
   brand: string,
-  subpages?: { productUrl: string; collectionUrl: string },
-  apiKey: string = ''
+  subpages?: { productUrl: string; collectionUrl: string }
 ): Promise<{
   perfData: PerformanceState;
   finalScore: number;
@@ -188,11 +188,11 @@ export async function runGooglePageSpeed(
   const prodUrl = subpages?.productUrl || `${new URL(cleanUrl).origin}/products`;
   const colUrl = subpages?.collectionUrl || `${new URL(cleanUrl).origin}/collections/all`;
 
-  // Паралельний запуск сканування 3-х сторінок за допомогою API-ключа
+  // Паралельний запуск сканування 3-х сторінок
   const results = await Promise.allSettled([
-    fetchSinglePageSpeed(cleanUrl, apiKey),
-    fetchSinglePageSpeed(prodUrl, apiKey),
-    fetchSinglePageSpeed(colUrl, apiKey)
+    fetchSinglePageSpeed(cleanUrl),
+    fetchSinglePageSpeed(prodUrl),
+    fetchSinglePageSpeed(colUrl)
   ]);
 
   // Результат головної сторінки (обов'язковий)
