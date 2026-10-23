@@ -28,9 +28,9 @@ import { AuditTabs } from './AuditTabs';
 
 const AUDIT_STEPS = [
   "Ініціалізація домену та перевірка доступності...",
-  "Підключення до Google PageSpeed Insights API (Mobile Lighthouse)...",
-  "Аналіз метрик Core Web Vitals (LCP, TBT, CLS)...",
+  "Автоматичний пошук посилань на PDP (товар) та PLP (колекцію)...",
   "Сканування вихідного коду на Shopify Web Pixels vs Hardcode...",
+  "Підключення до Google PageSpeed Insights API (Mobile Lighthouse)...",
   "Перевірка присутності GA4, Meta CAPI, TikTok Events та Clarity...",
   "Аналіз валідності канонічних тегів (Canonical) та мета-тегів...",
   "Формування персоналізованого комерційного висновку..."
@@ -52,7 +52,6 @@ export default function App() {
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  // Журнал діагностики для відлагодження
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([
     {
       source: 'Google PageSpeed',
@@ -85,7 +84,9 @@ export default function App() {
     summary: "Офіційний Google PageSpeed: оцінка 58/100, LCP 3.9 c.",
     salesHook: "⚡ Кожна додаткова секунда затримки мобільного першого екрана зрізає конверсію на 7-10%.",
     pages: [
-      { name: "Головна сторінка (Google Lighthouse Live)", type: "Home", mobileScore: 58, desktopScore: 92, lcp: "3.9 c", tbt: "480 мс", a11y: 96, share: "Основний вхід" }
+      { name: "Головна сторінка", type: "Home", mobileScore: 58, desktopScore: 92, lcp: "3.9 c", tbt: "480 мс", a11y: 96, share: "22% трафіку" },
+      { name: "Картка товару (PDP)", type: "Product", mobileScore: 48, desktopScore: 84, lcp: "4.8 c", tbt: "720 мс", a11y: 98, share: "54% трафіку (Реклама)" },
+      { name: "Каталог колекції (PLP)", type: "Collection", mobileScore: 64, desktopScore: 95, lcp: "3.4 c", tbt: "310 мс", a11y: 90, share: "24% трафіку" }
     ],
     blockers: [
       "Синхронні JS-скрипти теми блокують First Contentful Paint",
@@ -134,11 +135,14 @@ export default function App() {
     }, 550);
 
     let detectedTools: ToolStatus[] = [];
+    let detectedSubpages: { productUrl: string; collectionUrl: string } | undefined;
+
     try {
-      const { seo, tools, log: htmlLog } = await parseStoreHtml(cleanHome, host, brand);
+      const { seo, tools, subpages, log: htmlLog } = await parseStoreHtml(cleanHome, host, brand);
       setSeoMetrics(seo);
       setAnalyticsTools(tools);
       detectedTools = tools;
+      detectedSubpages = subpages;
       newLogs.push(htmlLog);
     } catch (e: any) {
       newLogs.push({
@@ -150,8 +154,14 @@ export default function App() {
     }
 
     try {
-      setLoadingStep(1);
-      const { perfData: livePerf, finalScore, networkUrls, log: pageSpeedLog } = await runGooglePageSpeed(cleanHome, host, brand);
+      setLoadingStep(3);
+      // Передаємо підсторінки для Google PageSpeed
+      const { perfData: livePerf, finalScore, networkUrls, log: pageSpeedLog } = await runGooglePageSpeed(
+        cleanHome, 
+        host, 
+        brand, 
+        detectedSubpages
+      );
       setPerfData(livePerf);
       setCurrentScore(finalScore);
       newLogs.push(pageSpeedLog);
@@ -165,13 +175,13 @@ export default function App() {
           timestamp: new Date().toLocaleTimeString('uk-UA')
         });
       }
-      setStatusMessage(`Аудит для ${host} успішно сформовано наживо через Google PageSpeed!`);
+      setStatusMessage(`Аудит для ${host} (Home, PDP, PLP) успішно сформовано наживо через Google PageSpeed!`);
     } catch (err: any) {
       const { perfData: fallbackPerf, finalScore: fallbackScore, log: fallbackLog } = generateDynamicFallback(host, brand, err?.message || 'Timeout / Rate limit');
       setPerfData(fallbackPerf);
       setCurrentScore(fallbackScore);
       newLogs.push(fallbackLog);
-      setStatusMessage(`Аудит для ${host} сформовано (застосовано резервну оцінку через збій Google API)!`);
+      setStatusMessage(`Аудит для ${host} сформовано (застосовано розрахункову модель через збій Google API)!`);
     } finally {
       clearInterval(progressInterval);
       setLoadingProgress(100);
@@ -228,7 +238,7 @@ export default function App() {
                 <span>Аналіз магазину</span>
               </h2>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                Введіть адресу Shopify магазину. Звіт, назва бренду та метрики генеруються в реальному часі.
+                Введіть адресу Shopify магазину. Система автоматично знайде сторінку товару (PDP) та колекції (PLP) для повноцінного аналізу.
               </p>
             </div>
           </div>
@@ -276,7 +286,7 @@ export default function App() {
                 ></div>
               </div>
               <p className="text-[11px] text-slate-500">
-                ⏳ Google Lighthouse та аналізатор структури магазину обробляють {currentHost}. Займає 12–18 секунд.
+                ⏳ Google Lighthouse та аналізатор структури магазину обробляють {currentHost} (Home + PDP + PLP).
               </p>
             </div>
           )}
@@ -364,7 +374,7 @@ export default function App() {
           })}
         </div>
 
-        {/* Dynamic Tab Views rendered from AuditTabs */}
+        {/* Dynamic Tab Views */}
         <AuditTabs
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -378,7 +388,7 @@ export default function App() {
           setPlanFilter={setPlanFilter}
         />
 
-        {/* Секція діагностики джерел даних (System Health & Developer Logs) */}
+        {/* Секція діагностики */}
         <section className="bg-slate-900 text-slate-200 border border-slate-800 rounded-2xl p-4 shadow-sm text-xs space-y-3">
           <div className="flex items-center justify-between border-b border-slate-800 pb-2">
             <div className="flex items-center space-x-2">
