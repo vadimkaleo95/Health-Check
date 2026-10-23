@@ -129,7 +129,6 @@ export async function runGooglePageSpeed(cleanUrl: string, host: string, brand: 
   networkUrls: string[];
   log: AuditLog;
 }> {
-  const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(cleanUrl)}&strategy=mobile`;
   const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(cleanUrl)}&strategy=mobile&key=AIzaSyCNNj8qz2-Lwt9i5APWLgRT0RWJGG_mA2A`;
   const res = await fetch(apiUrl);
   
