@@ -165,8 +165,9 @@ export async function parseStoreHtml(cleanUrl: string, host: string, brand: stri
 
 // Запит до одного URL в Google PageSpeed
 async function fetchSinglePageSpeed(url: string, apiKey: string) {
+  const apiKey = import.meta.env.VITE_GOOGLE_PAGESPEED_KEY || '';
   const keyParam = apiKey ? `&key=${apiKey}` : '';
-  const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(cleanUrl)}&strategy=mobile&key=AIzaSyCNNj8qz2-Lwt9i5APWLgRT0RWJGG_mA2A`;
+  const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(cleanUrl)}&strategy=mobile${keyParam}`;
   const res = await fetch(apiUrl);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return await res.json();
