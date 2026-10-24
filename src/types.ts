@@ -1,10 +1,17 @@
-import { ToolStatus } from './analyticsDetect';
+export type TabType = 'summary' | 'analytics' | 'performance' | 'shopify' | 'seo' | 'ux' | 'plan';
 
-export type { ToolStatus };
-
-export interface PageMetric {
+export interface ToolStatus {
   name: string;
-  type: string;
+  installed: boolean;
+  type: 'native_app' | 'hybrid' | 'hardcode' | 'not_detected';
+  statusText: string;
+  status: 'pass' | 'warn' | 'fail';
+  channel: string;
+}
+
+export interface PerformancePage {
+  name: string;
+  type: 'Home' | 'Product' | 'Collection';
   mobileScore: number;
   desktopScore: number;
   lcp: string;
@@ -18,8 +25,16 @@ export interface PerformanceState {
   statusLabel: string;
   summary: string;
   salesHook: string;
-  pages: PageMetric[];
+  pages: PerformancePage[];
   blockers: string[];
+}
+
+export interface SeoCheckItem {
+  id: string;
+  name: string;
+  detected: string;
+  details: string;
+  status: 'pass' | 'warn' | 'fail';
 }
 
 export interface SeoMetricsState {
@@ -29,6 +44,16 @@ export interface SeoMetricsState {
   metaDescLength: number;
   canonicalStatus: 'pass' | 'warn' | 'fail';
   canonicalDetails: string;
+  // Нові поля аудиту
+  h1Count: number;
+  h1Text: string;
+  schemaTypes: string[];
+  hasOgImage: boolean;
+  ogImageUrl?: string;
+  hreflangCount: number;
+  robotsDirectives: string;
+  aiReadinessSummary: string;
+  checks: SeoCheckItem[];
 }
 
 export interface ActionPlanTask {
@@ -38,5 +63,3 @@ export interface ActionPlanTask {
   why: string;
   estimate: string;
 }
-
-export type TabType = 'summary' | 'analytics' | 'performance' | 'shopify' | 'seo' | 'ux' | 'plan';
