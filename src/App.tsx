@@ -1,457 +1,317 @@
 import React, { useState } from 'react';
 import { 
-  ShieldAlert, 
-  CheckCircle2, 
-  RefreshCw, 
   Search, 
-  Gauge, 
-  BarChart3, 
-  Layers, 
+  Loader2, 
+  AlertCircle, 
   Sparkles, 
-  Info, 
-  Calendar, 
-  ListTodo, 
-  Smartphone, 
-  ShoppingBag, 
+  RefreshCw, 
+  Terminal, 
+  CheckCircle2, 
   Globe, 
-  Activity, 
-  ExternalLink,
-  Terminal,
-  AlertCircle,
-  CheckCircle,
-  HelpCircle
+  ShieldCheck 
 } from 'lucide-react';
 import { TabType, ToolStatus, PerformanceState, SeoMetricsState, ActionPlanTask } from './types';
-import { applyNetworkEvidence } from './analyticsDetect';
-import { extractDomainInfo, parseStoreHtml, runGooglePageSpeed, generateDynamicFallback, AuditLog } from './auditEngine';
+import { extractDomainInfo, parseStoreHtml, runGooglePageSpeed, AuditLog } from './auditEngine';
 import { AuditTabs } from './AuditTabs';
 
-const AUDIT_STEPS = [
-  "Ініціалізація домену та перевірка доступності...",
-  "Автоматичний пошук посилань на PDP (товар) та PLP (колекцію)...",
-  "Сканування вихідного коду на Shopify Web Pixels vs Hardcode...",
-  "Підключення до Google PageSpeed Insights API (Mobile Lighthouse)...",
-  "Перевірка присутності GA4, Meta CAPI, TikTok Events та Clarity...",
-  "Аналіз валідності канонічних тегів (Canonical) та мета-тегів...",
-  "Формування персоналізованого комерційного висновку..."
+const INITIAL_TASKS: ActionPlanTask[] = [
+  {
+    id: 1,
+    role: 'Dev Team',
+    task: 'Міграція пікселів з theme.liquid на Web Pixels API',
+    why: 'Запобігає втраті даних конверсій на новому Checkout Extensibility',
+    estimate: '3–4 год'
+  },
+  {
+    id: 2,
+    role: 'Dev Team',
+    task: 'Відкладене завантаження сторонніх маркетингових скриптів (defer/async)',
+    why: 'Знижує Total Blocking Time (TBT) на мобільних пристроях',
+    estimate: '2–3 год'
+  },
+  {
+    id: 3,
+    role: 'SEO / Content',
+    task: 'Усунення дублювання H1 на головній сторінці (переведення логотипу на div/span)',
+    why: 'Фокусує релевантність сторінки для пошукових ботів Google',
+    estimate: '1 год'
+  },
+  {
+    id: 4,
+    role: 'Design / UX',
+    task: 'Впровадження Sticky-кнопки «Додати в кошик» для мобільної картки товару',
+    why: 'Збільшує мобільний CTR переходу до оформлення замовлення до +7%',
+    estimate: '2 год'
+  }
 ];
 
-const DEFAULT_TASKS: ActionPlanTask[] = [
-  { id: 1, role: "Dev Team", task: "Перенесення hardcoded трекерів у нативні Shopify Web Pixels", why: "Checkout Extensibility сумісність", estimate: "1 день" },
-  { id: 2, role: "Dev Team", task: "Підключення Meta Conversions API (CAPI) та TikTok Events API", why: "Відновлення до 25% втрачених подій", estimate: "2 дні" },
-  { id: 3, role: "Dev Team", task: "Оптимізація виявлених блокуючих CSS/JS ресурсів теми (LCP)", why: "Прискорення рендеру", estimate: "2 дні" },
-  { id: 4, role: "Design / UX", task: "Додати Sticky Add-to-Cart кнопку для мобільних пристроїв", why: "Зростання мобільного CTR на 5-8%", estimate: "1 день" },
-  { id: 5, role: "SEO / Content", task: "Корекція шаблону Title для усунення подвійного бренду", why: "Запобігає обрізанню сніпетів у Google", estimate: "0.5 дня" }
-];
-
-export default function App() {
-  const [homeUrl, setHomeUrl] = useState("guniaproject.com.ua");
-
+export const App: React.FC = () => {
+  const [inputUrl, setInputUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [loadingStep, setLoadingStep] = useState(0);
-  const [loadingProgress, setLoadingProgress] = useState(0);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [hasAudited, setHasAudited] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([
-    {
-      source: 'Google PageSpeed',
-      status: 'success',
-      message: 'Система готова до запуску. Введіть адресу Shopify магазину.',
-      timestamp: 'Старт'
-    }
-  ]);
-  const [showDevLogs, setShowDevLogs] = useState(true);
-
+  // Стан результатів
+  const [currentHost, setCurrentHost] = useState('');
+  const [brandName, setBrandName] = useState('');
+  const [finalScore, setFinalScore] = useState(0);
   const [activeTab, setActiveTab] = useState<TabType>('summary');
-  const [planFilter, setPlanFilter] = useState<'all' | 'Dev Team' | 'SEO / Content' | 'Design / UX'>('all');
+  const [logs, setLogs] = useState<AuditLog[]>([]);
 
-  const [currentScore, setCurrentScore] = useState(72);
-  const [brandName, setBrandName] = useState("Gunia Project");
-  const [currentHost, setCurrentHost] = useState("guniaproject.com.ua");
-  const [auditDate, setAuditDate] = useState("Жовтень 2026");
-
-  const [analyticsTools, setAnalyticsTools] = useState<ToolStatus[]>([
-    { name: "Google Analytics 4 (GA4)", installed: true, type: "hardcode", statusText: "Прямий хардкод gtag.js у тему замість Shopify Google App", status: "warn", channel: "Web Pixel" },
-    { name: "Meta Pixel (Facebook / Instagram)", installed: true, type: "native_app", statusText: "Підключено через Shopify App; Server-Side CAPI не активний", status: "warn", channel: "Web Pixel" },
-    { name: "TikTok Pixel", installed: true, type: "hardcode", statusText: "Прямий скрипт у theme.liquid; Events API відсутній", status: "warn", channel: "—" },
-    { name: "Microsoft Clarity", installed: true, type: "hardcode", statusText: "Завантажується без попередньої згоди (Порушення GDPR)", status: "fail", channel: "—" },
-    { name: "Google Search Console", installed: false, type: "not_detected", statusText: "Не виявлено мета-тег верифікації google-site-verification", status: "warn", channel: "Search" }
-  ]);
-
+  // Дані вкладок
   const [perfData, setPerfData] = useState<PerformanceState>({
-    status: "warning",
-    statusLabel: "Потребує уваги",
-    summary: "Офіційний Google PageSpeed: оцінка 58/100, LCP 3.9 c.",
-    salesHook: "⚡ Кожна додаткова секунда затримки мобільного першого екрана зрізає конверсію на 7-10%.",
-    pages: [
-      { name: "Головна сторінка", type: "Home", mobileScore: 58, desktopScore: 92, lcp: "3.9 c", tbt: "480 мс", a11y: 96, share: "22% трафіку" },
-      { name: "Картка товару (PDP)", type: "Product", mobileScore: 48, desktopScore: 84, lcp: "4.8 c", tbt: "720 мс", a11y: 98, share: "54% трафіку (Реклама)" },
-      { name: "Каталог колекції (PLP)", type: "Collection", mobileScore: 64, desktopScore: 95, lcp: "3.4 c", tbt: "310 мс", a11y: 90, share: "24% трафіку" }
-    ],
-    blockers: [
-      "Синхронні JS-скрипти теми блокують First Contentful Paint",
-      "CSS файли шрифтів та модулів кошика завантажуються без відкладення"
-    ]
+    status: 'good',
+    statusLabel: 'Очікує перевірки',
+    summary: '',
+    salesHook: '',
+    pages: [],
+    blockers: []
   });
 
   const [seoMetrics, setSeoMetrics] = useState<SeoMetricsState>({
-    titleText: "Gunia Project — Офіційний інтернет-магазин виробів ручної роботи",
-    titleLength: 64,
-    metaDescText: "Автентична кераміка, прикраси та аксесуари ручної роботи з традиційними українськими мотивами.",
-    metaDescLength: 98,
-    canonicalStatus: "pass",
-    canonicalDetails: "Тег <link rel=\"canonical\"> налаштовано коректно."
+    titleText: '',
+    titleLength: 0,
+    metaDescText: '',
+    metaDescLength: 0,
+    canonicalStatus: 'pass',
+    canonicalDetails: '',
+    h1Count: 0,
+    h1Text: '',
+    schemaTypes: [],
+    hasOgImage: false,
+    hreflangCount: 0,
+    robotsDirectives: '',
+    aiReadinessSummary: '',
+    checks: []
   });
 
-  const handleRunAudit = async () => {
+  const [analyticsTools, setAnalyticsTools] = useState<ToolStatus[]>([]);
+  const [tasks] = useState<ActionPlanTask[]>(INITIAL_TASKS);
+  const [planFilter, setPlanFilter] = useState<'all' | 'Dev Team' | 'SEO / Content' | 'Design / UX'>('all');
+
+  const filteredTasks = tasks.filter(t => planFilter === 'all' || t.role === planFilter);
+
+  const handleRunAudit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!inputUrl.trim()) return;
+
     setIsLoading(true);
-    setLoadingProgress(10);
-    setLoadingStep(0);
-    setStatusMessage("Ініціалізація домену та калібрування аудиту...");
+    setError(null);
+    setLogs([]);
 
-    let cleanHome = homeUrl.trim();
-    if (!cleanHome.startsWith('http://') && !cleanHome.startsWith('https://')) {
-      cleanHome = 'https://' + cleanHome;
-      setHomeUrl(cleanHome);
-    }
-
-    const { host, brand } = extractDomainInfo(cleanHome);
-    setBrandName(brand);
+    const { host, brand } = extractDomainInfo(inputUrl);
     setCurrentHost(host);
-    setAuditDate(new Date().toLocaleDateString('uk-UA', { month: 'long', year: 'numeric' }));
+    setBrandName(brand);
 
-    const newLogs: AuditLog[] = [];
-
-    const progressInterval = setInterval(() => {
-      setLoadingProgress((prev) => {
-        if (prev < 90) {
-          const next = prev + Math.floor(Math.random() * 9) + 4;
-          const stepIndex = Math.min(AUDIT_STEPS.length - 1, Math.floor((next / 100) * AUDIT_STEPS.length));
-          setLoadingStep(stepIndex);
-          return next;
-        }
-        return prev;
-      });
-    }, 550);
-
-    let detectedTools: ToolStatus[] = [];
-    let detectedSubpages: { productUrl: string; collectionUrl: string } | undefined;
+    const targetUrl = inputUrl.trim().startsWith('http') 
+      ? inputUrl.trim() 
+      : `https://${inputUrl.trim()}`;
 
     try {
-      const { seo, tools, subpages, log: htmlLog } = await parseStoreHtml(cleanHome, host, brand);
-      setSeoMetrics(seo);
-      setAnalyticsTools(tools);
-      detectedTools = tools;
-      detectedSubpages = subpages;
-      newLogs.push(htmlLog);
-    } catch (e: any) {
-      newLogs.push({
-        source: 'HTML Proxy',
-        status: 'error',
-        message: `Помилка аналізу вихідного коду: ${e?.message || 'невідома помилка'}`,
-        timestamp: new Date().toLocaleTimeString('uk-UA')
-      });
-    }
+      // 1. Аналіз публічного HTML та технічного SEO
+      const htmlResult = await parseStoreHtml(targetUrl, host, brand);
+      setSeoMetrics(htmlResult.seo);
+      setAnalyticsTools(htmlResult.tools);
+      setLogs(prev => [...prev, htmlResult.log]);
 
-    try {
-      setLoadingStep(3);
-      // Передаємо підсторінки для Google PageSpeed
-      const { perfData: livePerf, finalScore, networkUrls, log: pageSpeedLog } = await runGooglePageSpeed(
-        cleanHome, 
-        host, 
-        brand, 
-        detectedSubpages
-      );
-      setPerfData(livePerf);
-      setCurrentScore(finalScore);
-      newLogs.push(pageSpeedLog);
+      // 2. Реальний аудит продуктивності Google PageSpeed
+      const speedResult = await runGooglePageSpeed(targetUrl, host, brand, htmlResult.subpages);
+      setPerfData(speedResult.perfData);
+      setFinalScore(speedResult.finalScore);
+      setLogs(prev => [...prev, speedResult.log]);
 
-      if (detectedTools.length && networkUrls.length) {
-        setAnalyticsTools(applyNetworkEvidence(detectedTools, networkUrls));
-        newLogs.push({
-          source: 'Analytics Scanner',
-          status: 'success',
-          message: `Звірено результати з ${networkUrls.length} мережевими викликами Lighthouse.`,
-          timestamp: new Date().toLocaleTimeString('uk-UA')
-        });
-      }
-      setStatusMessage(`Аудит для ${host} (Home, PDP, PLP) успішно сформовано наживо через Google PageSpeed!`);
+      setHasAudited(true);
     } catch (err: any) {
-      const { perfData: fallbackPerf, finalScore: fallbackScore, log: fallbackLog } = generateDynamicFallback(host, brand, err?.message || 'Timeout / Rate limit');
-      setPerfData(fallbackPerf);
-      setCurrentScore(fallbackScore);
-      newLogs.push(fallbackLog);
-      setStatusMessage(`Аудит для ${host} сформовано (застосовано розрахункову модель через збій Google API)!`);
+      const message = err?.message || 'Не вдалося виконати сканування домену.';
+      setError(message);
+      setLogs(prev => [
+        ...prev,
+        {
+          source: 'HTML Proxy',
+          status: 'error',
+          message,
+          timestamp: new Date().toLocaleTimeString('uk-UA')
+        }
+      ]);
     } finally {
-      clearInterval(progressInterval);
-      setLoadingProgress(100);
-      setAuditLogs(newLogs);
-      setTimeout(() => setIsLoading(false), 350);
+      setIsLoading(false);
     }
   };
 
-  const filteredTasks = planFilter === 'all' 
-    ? DEFAULT_TASKS 
-    : DEFAULT_TASKS.filter(t => t.role === planFilter);
-
-  const tabsConfig = [
-    { id: 'summary', label: 'Головна таблиця', icon: Layers },
-    { id: 'analytics', label: 'Аналітика (Shopify Apps vs Code)', icon: ShieldAlert },
-    { id: 'performance', label: 'Швидкість (Google PageSpeed Live)', icon: Gauge },
-    { id: 'shopify', label: 'Специфіка Shopify', icon: ShoppingBag },
-    { id: 'seo', label: 'SEO, AI & Каталог', icon: BarChart3 },
-    { id: 'ux', label: 'UX & Мобільні', icon: Smartphone },
-    { id: 'plan', label: 'План робіт', icon: ListTodo }
+  const tabsConfig: { id: TabType; label: string }[] = [
+    { id: 'summary', label: 'Підсумок' },
+    { id: 'performance', label: 'Швидкість' },
+    { id: 'analytics', label: 'Аналітика' },
+    { id: 'shopify', label: 'Shopify' },
+    { id: 'seo', label: 'SEO & AI' },
+    { id: 'ux', label: 'UX / CRO' },
+    { id: 'plan', label: 'План робіт' }
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50/70 text-slate-900 font-sans antialiased selection:bg-indigo-100 selection:text-indigo-900">
-      
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-16">
+      {/* Верхня навігаційна панель */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
+        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-xs">
-              <Sparkles className="w-4 h-4" />
+            <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold shadow-xs">
+              🛍️
             </div>
             <div>
-              <span className="font-bold text-base text-slate-900 tracking-tight">
-                Shopify & E-Commerce Health Check
+              <span className="font-bold text-slate-900 text-sm tracking-tight block">
+                Shopify Health Check
               </span>
-              <span className="block text-[11px] text-slate-400">
-                Live Google PageSpeed Engine & Shopify Architecture Scanner
+              <span className="text-[11px] text-slate-500 block">
+                Технічний, швидкісний та AI-аудит вітрини
               </span>
             </div>
+          </div>
+
+          <div className="flex items-center space-x-2 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-200">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Real-time аудит без симуляцій</span>
           </div>
         </div>
       </header>
 
-      {/* Main Container */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-5">
-        
-        {/* Input Bar */}
-        <section className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-            <div>
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-700 flex items-center space-x-1.5">
-                <Search className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Аналіз магазину</span>
-              </h2>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Введіть адресу Shopify магазину. Система автоматично знайде сторінку товару (PDP) та колекції (PLP) для повноцінного аналізу.
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
-                <Globe className="w-4 h-4 text-indigo-600" />
-                Адреса магазину для сканування
-              </label>
-              <div className="flex flex-col sm:flex-row gap-2.5">
+      <main className="max-w-6xl mx-auto px-4 pt-8 space-y-6">
+        {/* Поле запуску аудиту */}
+        <section className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
+          <form onSubmit={handleRunAudit} className="space-y-3">
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+              Адреса магазину Shopify:
+            </label>
+            <div className="flex flex-col sm:flex-row gap-2.5">
+              <div className="relative flex-1">
+                <Globe className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   type="text"
-                  value={homeUrl}
-                  onChange={(e) => setHomeUrl(e.target.value)}
-                  placeholder="наприклад, arc.tech або store.com"
-                  className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm text-slate-900 font-mono focus:outline-none focus:border-indigo-600 shadow-sm transition"
+                  placeholder="наприклад, gymshark.com або allbirds.com"
+                  value={inputUrl}
+                  onChange={(e) => setInputUrl(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 transition"
                 />
-
-                <button
-                  disabled={isLoading}
-                  onClick={handleRunAudit}
-                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium text-xs sm:text-sm transition shadow-xs flex items-center justify-center space-x-2 disabled:opacity-60 cursor-pointer active:scale-98 shrink-0"
-                >
-                  <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-                  <span>{isLoading ? 'Аналізуємо...' : 'Запустити аудит'}</span>
-                </button>
               </div>
-            </div>
-          </div>
-
-          {isLoading && (
-            <div className="p-4 bg-indigo-50/50 border border-indigo-100 rounded-xl space-y-2 mt-2">
-              <div className="flex items-center justify-between text-xs font-medium text-indigo-900">
-                <span className="flex items-center gap-1.5">
-                  <Activity className="w-4 h-4 text-indigo-600 animate-pulse" />
-                  {AUDIT_STEPS[loadingStep]}
-                </span>
-                <span className="font-mono">{loadingProgress}%</span>
-              </div>
-              <div className="w-full bg-indigo-100 h-2 rounded-full overflow-hidden">
-                <div 
-                  className="bg-indigo-600 h-full transition-all duration-300 rounded-full"
-                  style={{ width: `${loadingProgress}%` }}
-                ></div>
-              </div>
-              <p className="text-[11px] text-slate-500">
-                ⏳ Google Lighthouse та аналізатор структури магазину обробляють {currentHost} (Home + PDP + PLP).
-              </p>
-            </div>
-          )}
-
-          {statusMessage && !isLoading && (
-            <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>{statusMessage}</span>
-            </div>
-          )}
-        </section>
-
-        {/* Score Card */}
-        <section className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-            <div>
-              <div className="flex items-center space-x-2 mb-1 flex-wrap">
-                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-100 flex items-center gap-1">
-                  <ShoppingBag className="w-3 h-3" /> Shopify Health Report
-                </span>
-                <span className="text-xs text-slate-400 flex items-center gap-1">
-                  <Calendar className="w-3 h-3" /> {auditDate}
-                </span>
-              </div>
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-                {brandName}: Комплексний аудит e-Commerce
-              </h1>
-              <a 
-                href={`https://${currentHost}/`} 
-                target="_blank" 
-                rel="noreferrer" 
-                className="text-xs text-indigo-600 hover:underline font-mono inline-flex items-center gap-1"
-              >
-                https://{currentHost}/ <ExternalLink className="w-3 h-3" />
-              </a>
-            </div>
-
-            <div className="flex items-center space-x-3 bg-slate-50 border border-slate-200 rounded-xl p-3 self-start sm:self-center">
-              <div className="text-right">
-                <div className="text-[10px] uppercase font-semibold text-slate-400">Зважений бал сайту</div>
-                <div className="text-xl font-extrabold text-slate-800">
-                  {currentScore} <span className="text-xs font-normal text-slate-400">/ 100</span>
-                </div>
-              </div>
-              <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm border ${
-                currentScore >= 80 
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                  : currentScore >= 50 
-                    ? 'bg-amber-50 text-amber-700 border-amber-200' 
-                    : 'bg-rose-50 text-rose-700 border-rose-200'
-              }`}>
-                {currentScore >= 80 ? 'A' : currentScore >= 50 ? 'B' : 'C'}
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 p-3 rounded-xl bg-amber-50/70 border border-amber-200/80 text-xs text-amber-900 flex items-start space-x-2">
-            <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-            <div>
-              <span className="font-bold">Ключовий висновок для бізнесу {brandName}: </span>
-              {perfData.summary}
-            </div>
-          </div>
-        </section>
-
-        {/* Tab Navigation */}
-        <div className="flex border-b border-slate-200 bg-transparent space-x-1 overflow-x-auto text-xs sm:text-sm">
-          {tabsConfig.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as TabType)}
-                className={`py-2 px-3 rounded-t-lg font-medium transition flex items-center space-x-1.5 whitespace-nowrap cursor-pointer border-b-2 ${
-                  isActive
-                    ? 'border-indigo-600 text-indigo-700 bg-white font-semibold'
-                    : 'border-transparent text-slate-500 hover:text-slate-900'
-                }`}
+                type="submit"
+                disabled={isLoading || !inputUrl.trim()}
+                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white text-sm font-semibold rounded-xl flex items-center justify-center gap-2 transition cursor-pointer shadow-xs disabled:cursor-not-allowed"
               >
-                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
-                <span>{tab.label}</span>
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Сканування...</span>
+                  </>
+                ) : (
+                  <>
+                    <Search className="w-4 h-4" />
+                    <span>Запустити аудит</span>
+                  </>
+                )}
               </button>
-            );
-          })}
-        </div>
-
-        {/* Dynamic Tab Views */}
-        <AuditTabs
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          brandName={brandName}
-          currentHost={currentHost}
-          perfData={perfData}
-          seoMetrics={seoMetrics}
-          analyticsTools={analyticsTools}
-          filteredTasks={filteredTasks}
-          planFilter={planFilter}
-          setPlanFilter={setPlanFilter}
-        />
-
-        {/* Секція діагностики */}
-        <section className="bg-slate-900 text-slate-200 border border-slate-800 rounded-2xl p-4 shadow-sm text-xs space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-            <div className="flex items-center space-x-2">
-              <Terminal className="w-4 h-4 text-emerald-400" />
-              <span className="font-bold text-slate-100 tracking-tight">
-                Діагностика джерел даних (Dev / QA Mode)
-              </span>
-              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
-                Автоматичний контроль правдивості
-              </span>
             </div>
-
-            <button
-              onClick={() => setShowDevLogs(!showDevLogs)}
-              className="text-[11px] text-slate-400 hover:text-indigo-400 transition cursor-pointer"
-            >
-              {showDevLogs ? 'Приховати логи' : 'Показати деталі'}
-            </button>
-          </div>
-
-          {showDevLogs && (
-            <div className="space-y-2">
-              <p className="text-[11px] text-slate-400">
-                ℹ️ Цей блок показує, чи вдалося отримати пряму відповідь від Google Lighthouse та завантажити вихідний HTML магазину без блокувань Cloudflare.
-              </p>
-
-              <div className="space-y-1.5 font-mono text-[11px]">
-                {auditLogs.map((log, i) => (
-                  <div 
-                    key={i} 
-                    className={`p-2.5 rounded-lg border flex items-start space-x-2.5 ${
-                      log.status === 'success' 
-                        ? 'bg-emerald-950/40 border-emerald-800/60 text-emerald-300' 
-                        : log.status === 'warning' 
-                          ? 'bg-amber-950/40 border-amber-800/60 text-amber-300' 
-                          : 'bg-rose-950/40 border-rose-800/60 text-rose-300'
-                    }`}
-                  >
-                    {log.status === 'success' && <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />}
-                    {log.status === 'warning' && <HelpCircle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />}
-                    {log.status === 'error' && <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />}
-                    
-                    <div className="flex-1 space-y-0.5">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold uppercase tracking-wider text-[10px]">
-                          [{log.source}]
-                        </span>
-                        <span className="text-slate-500 text-[10px]">{log.timestamp}</span>
-                      </div>
-                      <p className="leading-relaxed">{log.message}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          </form>
         </section>
 
-      </main>
+        {/* Сповіщення про помилку без застосування фіктивних даних */}
+        {error && (
+          <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-start space-x-3 text-rose-900 text-xs">
+            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <span className="font-bold block">Помилка отримання фактичних даних:</span>
+              <p className="leading-relaxed">{error}</p>
+            </div>
+          </div>
+        )}
 
-      <footer className="mt-8 border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-400">
-        Shopify Health Check Engine • Live Google PageSpeed & Web Pixels Analyzer
-      </footer>
+        {/* Результати аудиту */}
+        {hasAudited && (
+          <div className="space-y-6">
+            {/* Головна картка загальної оцінки */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center space-x-2">
+                  <h2 className="text-xl font-bold text-slate-900">{brandName}</h2>
+                  <span className="font-mono text-xs text-slate-400">({currentHost})</span>
+                </div>
+                <p className="text-xs text-slate-600">{perfData.summary}</p>
+              </div>
+
+              <div className="flex items-center gap-4 bg-slate-50 px-5 py-3 rounded-xl border border-slate-100 self-start sm:self-auto">
+                <div className="text-right">
+                  <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block">
+                    Mobile Speed
+                  </span>
+                  <span className="text-2xl font-black text-slate-900">
+                    {finalScore} <span className="text-xs font-normal text-slate-400">/ 100</span>
+                  </span>
+                </div>
+                <div className={`w-3 h-10 rounded-full ${
+                  finalScore >= 75 ? 'bg-emerald-500' : finalScore >= 45 ? 'bg-amber-500' : 'bg-rose-500'
+                }`} />
+              </div>
+            </div>
+
+            {/* Навігація вкладками */}
+            <nav className="flex space-x-1.5 overflow-x-auto pb-1 border-b border-slate-200 text-xs">
+              {tabsConfig.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-4 py-2.5 rounded-xl font-semibold transition whitespace-nowrap cursor-pointer ${
+                    activeTab === tab.id
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
+
+            {/* Контейнер вмісту вкладок */}
+            <AuditTabs
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+              brandName={brandName}
+              currentHost={currentHost}
+              perfData={perfData}
+              seoMetrics={seoMetrics}
+              analyticsTools={analyticsTools}
+              filteredTasks={filteredTasks}
+              planFilter={planFilter}
+              setPlanFilter={setPlanFilter}
+            />
+          </div>
+        )}
+
+        {/* Системний журнал перевірки */}
+        {logs.length > 0 && (
+          <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-xs font-mono text-slate-300 space-y-2">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2 text-[11px] text-slate-400">
+              <div className="flex items-center space-x-2">
+                <Terminal className="w-3.5 h-3.5" />
+                <span>Журнал викликів сканера (Audit Logs)</span>
+              </div>
+              <span>Всього операцій: {logs.length}</span>
+            </div>
+            <div className="space-y-1.5 max-h-40 overflow-y-auto pt-1">
+              {logs.map((lg, i) => (
+                <div key={i} className="flex items-start space-x-2 text-[11px]">
+                  <span className="text-slate-500">[{lg.timestamp}]</span>
+                  <span className={`font-semibold ${
+                    lg.status === 'success' ? 'text-emerald-400' : 
+                    lg.status === 'warning' ? 'text-amber-400' : 'text-rose-400'
+                  }`}>
+                    {lg.source}:
+                  </span>
+                  <span className="text-slate-300">{lg.message}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+      </main>
     </div>
   );
-}
+};
